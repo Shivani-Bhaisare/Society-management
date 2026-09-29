@@ -27,7 +27,7 @@ const Navbar = () => {
 
         {/* Right side */}
         <div className="flex items-center gap-5">
-          <Link href="#" className="text-sm text-white/80 hover:text-white">
+          <Link href="/auth/login" className="text-sm text-white/80 hover:text-white transition-colors">
             Login
           </Link>
           <Button href="#">Book a Demo</Button>
