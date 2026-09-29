@@ -1,13 +1,29 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import Button from '@/src/Components/Button'
+import Button from '../Components/Button'
 
 const links = ['Home', 'Platform', 'Solutions', 'For Residents', 'For Management', 'Resources']
 
 const Navbar = () => {
+  const [scrolled, setScrolled] = useState(false)
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
   return (
-    <nav className="absolute top-0 left-0 z-20 w-full">
-      <div className="mx-auto flex h-24 max-w-[1440px] items-center justify-between px-10">
+    <nav className="fixed left-0 top-0 z-50 w-full bg-transparent">
+      <div
+        className={`mx-auto flex max-w-[1440px] items-center justify-between px-10 transition-all duration-300 ${
+          scrolled ? 'h-20' : 'h-24'
+        }`}
+      >
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
           <Image src="/logo (2).png" alt="Society OS" width={36} height={36} />
