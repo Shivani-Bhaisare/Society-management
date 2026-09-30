@@ -1,7 +1,9 @@
+
 'use client'
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation' 
 import { Mail, Lock, Eye, EyeOff, CheckCircle2, Circle, ArrowRight } from 'lucide-react'
 
 export default function LoginPage() {
@@ -9,6 +11,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
+
+  const router = useRouter() 
 
   // Password validation rules
   const hasMinLength = password.length >= 8
@@ -303,6 +307,38 @@ export default function LoginPage() {
     </p>
 
   </form>
+
+
+  {/* =========================================================
+      ✅ ADDED: DEMO PANEL BUTTONS (API aane par delete kar dena)
+      ========================================================= */}
+  <div className="mt-4 grid grid-cols-3 gap-2">
+
+    <button
+      type="button"
+      onClick={() => router.push('/president/dashboard')}
+      className="rounded-lg border border-slate-200 bg-white py-2.5 text-xs sm:text-sm font-semibold text-slate-700 hover:border-[#2563EB] hover:bg-blue-50 hover:text-[#2563EB] transition cursor-pointer"
+    >
+      President
+    </button>
+
+    <button
+      type="button"
+      onClick={() => router.push('/secretary/dashboard')}
+      className="rounded-lg border border-slate-200 bg-white py-2.5 text-xs sm:text-sm font-semibold text-slate-700 hover:border-[#2563EB] hover:bg-blue-50 hover:text-[#2563EB] transition cursor-pointer"
+    >
+      Secretary
+    </button>
+
+    <button
+      type="button"
+      onClick={() => router.push('/treasurer/dashboard')}
+      className="rounded-lg border border-slate-200 bg-white py-2.5 text-xs sm:text-sm font-semibold text-slate-700 hover:border-[#2563EB] hover:bg-blue-50 hover:text-[#2563EB] transition cursor-pointer"
+    >
+      Treasurer
+    </button>
+
+  </div>
 
 </div>
   )

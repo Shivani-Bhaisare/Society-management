@@ -21,7 +21,7 @@ import WhySocietyOS from '../Components/WhySocietyOS'
 import CTA from '../Components/CTA'
 import Footer from '../Components/Footer'
 
-export default function Home() {
+export default function Home() {    
   return (
     <main>
       <Navbar />
@@ -46,6 +46,8 @@ export default function Home() {
      <WhySocietyOS/>
      <CTA/>
      <Footer/>
+    
     </main>
+
   )
 }

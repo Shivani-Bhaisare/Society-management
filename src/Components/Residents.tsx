@@ -23,13 +23,13 @@ const Residents = () => {
 
         {/* Phones image */}
         <div className="relative mx-auto mt-10 aspect-[1024/420] w-full max-w-[1024px] sm:mt-14">
-          <Image
+          {/* <Image
             src="/phones.png"
             alt="SocietyOS resident app screens"
             fill
             sizes="(min-width: 1024px) 1024px, 100vw"
             className="object-contain"
-          />
+          /> */}
         </div>
       </div>
     </section>

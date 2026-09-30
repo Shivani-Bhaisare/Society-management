@@ -2,7 +2,6 @@ import Image from 'next/image'
 import { FiClock, FiMapPin, FiArrowRight, FiCheckCircle } from 'react-icons/fi'
 import { LuBuilding2 } from "react-icons/lu";
 import Button from '../Components/Button'
-
 const tags = [
   'Clubhouse',
   'Swimming Pool',
@@ -11,7 +10,6 @@ const tags = [
   'Community Hall',
   'Guest Room',
 ]
-
 const Amenities = () => {
   return (
     <section className="relative w-full overflow-hidden bg-[#081121]">
