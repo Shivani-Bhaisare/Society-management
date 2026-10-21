@@ -1,15 +1,17 @@
+'use client'
+
+import { useState } from 'react'
 import Image from 'next/image'
+import { motion, type Variants } from 'framer-motion'
 import { ArrowRight, ArrowDown } from 'lucide-react'
 import Button from '../Components/Button'
 
-// Diagram ka apna 700 x 700 box hai. Hub ka center (350, 350) hai.
 const HUB = { x: 350, y: 350, r: 78 }
 
-// Hub ke around rings (radius)
 const RINGS = [
-  { r: 175, opacity: 0.22 },
-  { r: 265, opacity: 0.16 },
-  { r: 340, opacity: 0.1 },
+  { r: 175, opacity: 0.22, cls: 'hero-ring-a' },
+  { r: 265, opacity: 0.16, cls: 'hero-ring-b' },
+  { r: 340, opacity: 0.1, cls: 'hero-ring-a' },
 ]
 
 const nodes = [
@@ -21,7 +23,6 @@ const nodes = [
   { label: 'Operations', x: 349, y: 529, w: 102 },
 ]
 
-// Blue glow dots (rings par baithe hue)
 const glowDots = [
   { x: 357, y: 108 },
   { x: 140, y: 145 },
@@ -34,10 +35,30 @@ const glowDots = [
 
 const NODE_H = 27
 
+// First page load: wait for the navbar animation to finish (in seconds)
+const FIRST_LOAD_DELAY = 1.8
+// Later replays (scrolling back to the hero): almost no wait
+const REPLAY_DELAY = 0.2
+
+// Parent: children appear one after another. The delay is passed in via "custom"
+const container: Variants = {
+  hidden: {},
+  show: (delay: number) => ({
+    transition: { staggerChildren: 0.15, delayChildren: delay },
+  }),
+}
+
+const item: Variants = {
+  hidden: { opacity: 0, y: 30 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut' } },
+}
+
 const Hero = () => {
+  // Starts with the navbar delay, switches to a short delay after the hero leaves the screen once
+  const [delay, setDelay] = useState(FIRST_LOAD_DELAY)
+
   return (
     <section className="relative h-screen w-full overflow-hidden bg-[#000207]">
-      {/* Background image (poori screen par fit) */}
       <Image
         src="/image1 (2).png"
         alt="Modern residential society"
@@ -47,12 +68,18 @@ const Hero = () => {
         className="object-cover object-center"
       />
 
-      {/* Dark gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-r from-[#000207] via-[#000207]/70 to-transparent" />
 
-      {/* RIGHT SIDE: SocietyOS hub diagram + rings (sirf lg+ par) */}
-      <div
+      {/* RIGHT SIDE diagram: replays every time the hero enters the screen */}
+      <motion.div
         aria-hidden="true"
+        initial={{ opacity: 0, scale: 0.9 }}
+        whileInView={{
+          opacity: 1,
+          scale: 1,
+          transition: { duration: 1.2, ease: 'easeOut', delay },
+        }}
+        viewport={{ once: false, amount: 0.3 }}
         className="pointer-events-none absolute right-0 top-1/2 hidden aspect-square w-[min(56vw,100vh)] -translate-y-1/2 lg:block"
       >
         <svg viewBox="0 0 700 700" className="h-full w-full" fill="none">
@@ -71,29 +98,41 @@ const Hero = () => {
             </linearGradient>
           </defs>
 
-          {/* Rings (hub ke around) */}
+          {/* Rings: dashed + slowly rotating */}
           {RINGS.map((ring) => (
             <circle
               key={ring.r}
+              className={ring.cls}
               cx={HUB.x}
               cy={HUB.y}
               r={ring.r}
               stroke="#3B82F6"
               strokeOpacity={ring.opacity}
               strokeWidth="1"
+              strokeDasharray="3 9"
             />
           ))}
 
-          {/* Glow dots */}
-          {glowDots.map((d) => (
-            <g key={`${d.x}-${d.y}`}>
-              <circle cx={d.x} cy={d.y} r="10" fill="url(#hero-dot-glow)" />
-              <circle cx={d.x} cy={d.y} r="2.5" fill="#93C5FD" />
-            </g>
-          ))}
+          {/* Glow dots: the whole group orbits around the hub */}
+          <g className="hero-orbit">
+            {glowDots.map((d, i) => (
+              <g key={`${d.x}-${d.y}`}>
+                <circle cx={d.x} cy={d.y} r="10" fill="url(#hero-dot-glow)" />
+                <circle
+                  className="hero-pulse"
+                  style={{ animationDelay: `${i * 0.35}s` }}
+                  cx={d.x}
+                  cy={d.y}
+                  r="2.5"
+                  fill="#93C5FD"
+                />
+              </g>
+            ))}
+          </g>
 
           {/* Center hub */}
           <circle
+            className="hero-pulse"
             cx={HUB.x}
             cy={HUB.y}
             r={HUB.r + 30}
@@ -109,45 +148,23 @@ const Hero = () => {
             strokeOpacity="0.55"
             strokeWidth="1.4"
           />
-          <text
-            x={HUB.x}
-            y={HUB.y - 22}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill="#60A5FA"
-            fontSize="7"
-            fontWeight="700"
-            letterSpacing="1.8"
-          >
+          <text x={HUB.x} y={HUB.y - 22} textAnchor="middle" dominantBaseline="central" fill="#60A5FA" fontSize="7" fontWeight="700" letterSpacing="1.8">
             ONE CONNECTED
           </text>
-          <text
-            x={HUB.x}
-            y={HUB.y}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill="#FFFFFF"
-            fontSize="17"
-            fontWeight="700"
-          >
+          <text x={HUB.x} y={HUB.y} textAnchor="middle" dominantBaseline="central" fill="#FFFFFF" fontSize="17" fontWeight="700">
             SOCIETYOS
           </text>
-          <text
-            x={HUB.x}
-            y={HUB.y + 24}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill="#60A5FA"
-            fontSize="7"
-            fontWeight="700"
-            letterSpacing="1.8"
-          >
+          <text x={HUB.x} y={HUB.y + 24} textAnchor="middle" dominantBaseline="central" fill="#60A5FA" fontSize="7" fontWeight="700" letterSpacing="1.8">
             DATABASE
           </text>
 
-          {/* Node pills */}
-          {nodes.map((n) => (
-            <g key={n.label}>
+          {/* Node pills: gentle up-down float */}
+          {nodes.map((n, i) => (
+            <g
+              key={n.label}
+              className="hero-float"
+              style={{ animationDelay: `${i * 0.5}s` }}
+            >
               <rect
                 x={n.x - n.w / 2}
                 y={n.y - NODE_H / 2}
@@ -159,33 +176,26 @@ const Hero = () => {
                 stroke="#60A5FA"
                 strokeOpacity="0.25"
               />
-              <circle
-                cx={n.x - n.w / 2 + 11}
-                cy={n.y}
-                r="2.6"
-                fill="#60A5FA"
-              />
-              <text
-                x={n.x - n.w / 2 + 21}
-                y={n.y}
-                dominantBaseline="central"
-                fill="#FFFFFF"
-                fontSize="9"
-                fontWeight="700"
-                letterSpacing="1.1"
-              >
+              <circle cx={n.x - n.w / 2 + 11} cy={n.y} r="2.6" fill="#60A5FA" />
+              <text x={n.x - n.w / 2 + 21} y={n.y} dominantBaseline="central" fill="#FFFFFF" fontSize="9" fontWeight="700" letterSpacing="1.1">
                 {n.label.toUpperCase()}
               </text>
             </g>
           ))}
         </svg>
-      </div>
+      </motion.div>
 
-      {/* Content (pt-32 se text thoda niche aayega) */}
-      <div className="relative z-10 mx-auto flex h-full max-w-[1440px] flex-col justify-center px-10 pt-32">
-        {/* Eyebrow + heading (outline isi ke peeche hai) */}
+      {/* Content: stagger fade-up, replays every time the hero enters the screen */}
+      <motion.div
+        variants={container}
+        custom={delay}
+        initial="hidden"
+        whileInView="show"
+        viewport={{ once: false, amount: 0.3 }}
+        onViewportLeave={() => setDelay(REPLAY_DELAY)}
+        className="relative z-10 mx-auto flex h-full max-w-[1440px] flex-col justify-center px-10 pt-32"
+      >
         <div className="relative">
-          {/* LEFT SIDE: text ke peeche wali rounded outline (sirf lg+ par) */}
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -left-9 -top-20 hidden h-[340px] w-[360px] rounded-[120px] border border-[#3B82F6]/25 lg:block"
@@ -194,31 +204,39 @@ const Hero = () => {
             <span className="absolute left-[300px] top-[250px] h-1.5 w-1.5 rounded-full bg-[#3B82F6] shadow-[0_0_10px_3px_rgba(59,130,246,0.7)]" />
           </div>
 
-          <p className="relative text-xs font-medium uppercase tracking-widest text-white/80">
+          <motion.p
+            variants={item}
+            className="relative text-xs font-medium uppercase tracking-widest text-white/80"
+          >
             The operating system for modern societies
-          </p>
+          </motion.p>
 
-          <h1 className="relative mt-6 max-w-[720px] text-5xl font-bold uppercase leading-[1.1] text-white lg:text-6xl">
+          <motion.h1
+            variants={item}
+            className="relative mt-6 max-w-[720px] text-5xl font-bold uppercase leading-[1.1] text-white lg:text-6xl"
+          >
             Run your entire society from one connected platform.
-          </h1>
+          </motion.h1>
         </div>
 
-        <p className="mt-8 max-w-[600px] text-sm uppercase leading-6 text-white/80">
+        <motion.p
+          variants={item}
+          className="mt-8 max-w-[600px] text-sm uppercase leading-6 text-white/80"
+        >
           Society OS brings residents, security, finance, maintenance, visitors,
           amenities and everyday operations together in one intelligent platform.
-        </p>
+        </motion.p>
 
-        <div className="mt-8 flex flex-wrap gap-2">
+        <motion.div variants={item} className="mt-8 flex flex-wrap gap-2">
           <Button href="#">
             Book a Demo <ArrowRight size={16} />
           </Button>
           <Button href="#" variant="outline">
             Explore SocietyOS <ArrowDown size={16} />
           </Button>
-        </div>
+        </motion.div>
 
-        {/* Teen circles + text */}
-        <div className="mt-6 flex items-center gap-3">
+        <motion.div variants={item} className="mt-6 flex items-center gap-3">
           <div className="flex -space-x-1">
             <span className="h-3.5 w-3.5 rounded-full bg-[#2563EB]" />
             <span className="h-3.5 w-3.5 rounded-full bg-[#F59E0B]" />
@@ -227,8 +245,8 @@ const Hero = () => {
           <p className="text-xs text-white/60">
             Built for societies, communities and RWAs.
           </p>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </section>
   )
 }

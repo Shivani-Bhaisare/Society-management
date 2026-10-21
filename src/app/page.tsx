@@ -45,8 +45,7 @@ export default function Home() {
      <Communities/>
      <WhySocietyOS/>
      <CTA/>
-     <Footer/>
-    
+     <Footer/>    
     </main>
 
   )

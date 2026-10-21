@@ -2,12 +2,39 @@
 
 import { useState, ReactNode } from 'react'
 import Image from 'next/image'
+import { motion, type Variants } from 'framer-motion'
 import {
   Building2, MapPin, ArrowRight, Plus, Upload, MoreHorizontal,
   Phone, Mail, ShieldCheck, Wrench, Siren, FileText, Folder, Layers,
   Home, Users, ParkingCircle, FileUp,
 } from 'lucide-react'
 
+/* ---------- Animation ---------- */
+
+// Smooth "expo-out" curve: starts fast, settles softly
+const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
+
+// Replays every time a section enters the screen (set once: true to play only once)
+const VIEWPORT = { once: false, amount: 0.15 }
+
+// Container: children appear one after another
+const container: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.1, delayChildren: 0.05 } },
+}
+
+// Each child fades in while moving up and scaling slightly
+const item: Variants = {
+  hidden: { opacity: 0, y: 30, scale: 0.97 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.7, ease: EASE },
+  },
+}
+
+/* ---------- Data ---------- */
 const tabs = [
   'Overview', 'Society Profile', 'Towers & Blocks', 'Floors', 'Units / Flats',
   'Ownership', 'Residents', 'Parking', 'Documents', 'Custom Fields',
@@ -114,58 +141,77 @@ export default function SocietyMasterPage() {
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-5">
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
+      <motion.div
+        variants={container}
+        initial="hidden"
+        whileInView="show"
+        viewport={VIEWPORT}
+        className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+      >
+        <motion.div variants={item} className="min-w-0">
           <h1 className="text-xl font-bold sm:text-2xl">Society Master</h1>
           <p className="max-w-xl text-xs text-slate-400">
             Manage your society&apos;s core information, structure, units, ownership and foundational records from one place.
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 rounded-lg bg-[#6C63FF] px-3 py-2 text-xs font-semibold hover:opacity-90">
+        </motion.div>
+        <motion.div variants={item} className="flex items-center gap-2">
+          <button className="flex items-center gap-1.5  rounded-lg bg-gradient-to-r from-[#6C63FF] to-[#4DA3FF] px-4 py-2.5 text-xs font-semibold hover:opacity-90">
             <Plus className="h-3.5 w-3.5" /> Add / Update Society
           </button>
-          <button className="flex items-center gap-1.5 rounded-lg border border-[#272D39] px-3 py-2 text-xs text-slate-300 hover:bg-white/5">
+          <button className="flex items-center gap-1.5 rounded-lg border border-[#272D39] px-3 py-2.5 text-xs text-slate-300 hover:bg-white/5">
             <Upload className="h-3.5 w-3.5" /> <span className="hidden min-[480px]:inline">Import Data</span>
           </button>
           <button className="rounded-lg border border-[#272D39] p-2 text-slate-300 hover:bg-white/5" aria-label="More">
             <MoreHorizontal className="h-4 w-4" />
           </button>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* Society card */}
-      <Panel className="!p-0 overflow-hidden">
-        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-teal-500/15 text-teal-400">
-            <Building2 className="h-6 w-6" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-bold">Green Valley Residency</h2>
-            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
-              <span>Registered Residential Welfare Association</span>
-              <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> Bhopal, Madhya Pradesh</span>
-            </p>
+      <motion.div
+        variants={item}
+        initial="hidden"
+        whileInView="show"
+        viewport={VIEWPORT}
+      >
+        <Panel className="!p-0 overflow-hidden">
+          <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-teal-500/15 text-teal-400">
+              <Building2 className="h-6 w-6" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-bold">Green Valley Residency</h2>
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+                <span>Registered Residential Welfare Association</span>
+                <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> Bhopal, Madhya Pradesh</span>
+              </p>
+            </div>
+            <span className="w-fit rounded-full bg-white px-2.5 py-0.5 text-[10px] font-semibold text-emerald-600">● Active</span>
           </div>
-          <span className="w-fit rounded-full bg-white px-2.5 py-0.5 text-[10px] font-semibold text-emerald-600">● Active</span>
-        </div>
-        <div className="flex flex-col gap-3 border-t border-[#272D39] bg-white/[0.02] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="grid grid-cols-2 gap-x-8 gap-y-2 sm:flex sm:gap-8">
-            {[['Registration No.', 'RWA/BPL/2026/02188'], ['Established', '2026'], ['Total Towers', '10'], ['Total Units', '1001']].map(([l, v]) => (
-              <div key={l}>
-                <p className="text-[9px] uppercase text-slate-500">{l}</p>
-                <p className="text-xs font-semibold">{v}</p>
-              </div>
-            ))}
+          <div className="flex flex-col gap-3 border-t border-[#272D39] bg-white/[0.02] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2 sm:flex sm:gap-8">
+              {[['Registration No.', 'RWA/BPL/2026/02188'], ['Established', '2026'], ['Total Towers', '10'], ['Total Units', '1001']].map(([l, v]) => (
+                <div key={l}>
+                  <p className="text-[9px] uppercase text-slate-500">{l}</p>
+                  <p className="text-xs font-semibold">{v}</p>
+                </div>
+              ))}
+            </div>
+            <button className="flex w-fit items-center gap-2 rounded-lg bg-gradient-to-r from-[#6C63FF] to-[#4DA3FF] px-3 py-2 text-xs font-semibold hover:opacity-90">
+              Edit Society Profile <ArrowRight className="h-3.5 w-3.5" />
+            </button>
           </div>
-          <button className="flex w-fit items-center gap-1.5 rounded-lg bg-[#6C63FF] px-3 py-2 text-xs font-semibold hover:opacity-90">
-            Edit Society Profile <ArrowRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </Panel>
+        </Panel>
+      </motion.div>
 
       {/* Tabs */}
-      <div className="-mx-3 overflow-x-auto border-b border-[#272D39] px-3 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+      <motion.div
+        variants={item}
+        initial="hidden"
+        whileInView="show"
+        viewport={VIEWPORT}
+        className="-mx-3 overflow-x-auto border-b border-[#272D39] px-3 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
+      >
         <div className="flex min-w-max gap-5">
           {tabs.map((t) => (
             <button
@@ -179,10 +225,15 @@ export default function SocietyMasterPage() {
             </button>
           ))}
         </div>
-      </div>
+      </motion.div>
 
       {/* Society Overview */}
-      <section>
+      <motion.section
+        variants={item}
+        initial="hidden"
+        whileInView="show"
+        viewport={VIEWPORT}
+      >
         <Title title="Society Overview" sub="Foundational identity and registration record." link="Edit details →" />
         <Panel>
           <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
@@ -194,10 +245,15 @@ export default function SocietyMasterPage() {
             ))}
           </div>
         </Panel>
-      </section>
+      </motion.section>
 
       {/* Society Structure */}
-      <section>
+      <motion.section
+        variants={item}
+        initial="hidden"
+        whileInView="show"
+        viewport={VIEWPORT}
+      >
         <Title title="Society Structure" sub="Understand The Physical Structure Of Your Community" link="Manage Structure →" />
         <Panel>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -223,11 +279,17 @@ export default function SocietyMasterPage() {
             ))}
           </div>
         </Panel>
-      </section>
+      </motion.section>
 
       {/* Parking + Ownership */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[2fr_3fr]">
-        <section>
+      <motion.div
+        variants={container}
+        initial="hidden"
+        whileInView="show"
+        viewport={VIEWPORT}
+        className="grid grid-cols-1 gap-5 lg:grid-cols-[2fr_3fr]"
+      >
+        <motion.section variants={item}>
           <Title title="Parking Configuration" link="Manage Parking →" />
           <Panel className="h-[calc(100%-2.5rem)]">
             <p className="text-2xl font-bold">500</p>
@@ -239,9 +301,9 @@ export default function SocietyMasterPage() {
               <Mini v="50" l="EV Slots" /><Mini v="8" l="Reserved" />
             </div>
           </Panel>
-        </section>
+        </motion.section>
 
-        <section>
+        <motion.section variants={item}>
           <Title title="Unit & Ownership Snapshot" link="Manage Ownership →" />
           <Panel className="h-[calc(100%-2.5rem)]">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -259,12 +321,18 @@ export default function SocietyMasterPage() {
               <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-slate-200" />Vacant 56</span>
             </div>
           </Panel>
-        </section>
-      </div>
+        </motion.section>
+      </motion.div>
 
       {/* Management + Contact */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <section>
+      <motion.div
+        variants={container}
+        initial="hidden"
+        whileInView="show"
+        viewport={VIEWPORT}
+        className="grid grid-cols-1 gap-5 lg:grid-cols-2"
+      >
+        <motion.section variants={item}>
           <Title title="Current Management" link="View Committee →" />
           <Panel className="flex flex-col gap-2">
             {management.map(([n, r, img]) => (
@@ -280,9 +348,9 @@ export default function SocietyMasterPage() {
               <span>Management Committee</span><span className="text-blue-500">12 members</span>
             </div>
           </Panel>
-        </section>
+        </motion.section>
 
-        <section>
+        <motion.section variants={item}>
           <Title title="Society contact" link="Edit Contacts →" />
           <Panel className="flex flex-col gap-2">
             {contacts.map(({ t, v, i: Icon }) => (
@@ -292,29 +360,50 @@ export default function SocietyMasterPage() {
               </div>
             ))}
           </Panel>
-        </section>
-      </div>
+        </motion.section>
+      </motion.div>
 
       {/* Documents */}
       <section>
-        <Title title="Registration & Important Documents" link="View All Documents →" />
-        <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-4">
+        <motion.div
+          variants={item}
+          initial="hidden"
+          whileInView="show"
+          viewport={VIEWPORT}
+        >
+          <Title title="Registration & Important Documents" link="View All Documents →" />
+        </motion.div>
+        <motion.div
+          variants={container}
+          initial="hidden"
+          whileInView="show"
+          viewport={VIEWPORT}
+          className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-4"
+        >
           {docs.map(({ t, s, st, i: Icon }) => (
-            <Panel key={t} className="!p-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/15 text-orange-400"><Icon className="h-4 w-4" /></span>
-              <p className="mt-2 text-[11px] font-semibold">{t}</p>
-              <p className="text-[10px] text-slate-400">{s}</p>
-              <div className="mt-1 flex justify-between text-[10px]">
-                <span className="text-emerald-400">{st}</span><span className="text-blue-500">View</span>
-              </div>
-            </Panel>
+            <motion.div key={t} variants={item} className="min-w-0 [&>*]:h-full">
+              <Panel className="!p-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/15 text-orange-400"><Icon className="h-4 w-4" /></span>
+                <p className="mt-2 text-[11px] font-semibold">{t}</p>
+                <p className="text-[10px] text-slate-400">{s}</p>
+                <div className="mt-1 flex justify-between text-[10px]">
+                  <span className="text-emerald-400">{st}</span><span className="text-blue-500">View</span>
+                </div>
+              </Panel>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       </section>
 
       {/* Completeness + Recent Changes */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[2fr_3fr]">
-        <section>
+      <motion.div
+        variants={container}
+        initial="hidden"
+        whileInView="show"
+        viewport={VIEWPORT}
+        className="grid grid-cols-1 gap-5 lg:grid-cols-[2fr_3fr]"
+      >
+        <motion.section variants={item}>
           <Title title="Society Master completeness" />
           <Panel>
             <p className="text-2xl font-bold">50%</p>
@@ -329,9 +418,9 @@ export default function SocietyMasterPage() {
             </div>
             <button className="mt-4 text-[11px] font-semibold">Review Missing Date</button>
           </Panel>
-        </section>
+        </motion.section>
 
-        <section>
+        <motion.section variants={item}>
           <Title title="Recent Changes" link="View Audit Trail →" />
           <Panel>
             <div className="flex flex-col gap-4 border-l border-blue-500/40 pl-4">
@@ -344,19 +433,36 @@ export default function SocietyMasterPage() {
               ))}
             </div>
           </Panel>
-        </section>
-      </div>
+        </motion.section>
+      </motion.div>
 
       {/* Quick Actions */}
       <section>
-        <Title title="Quick Actions" />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+        <motion.div
+          variants={item}
+          initial="hidden"
+          whileInView="show"
+          viewport={VIEWPORT}
+        >
+          <Title title="Quick Actions" />
+        </motion.div>
+        <motion.div
+          variants={container}
+          initial="hidden"
+          whileInView="show"
+          viewport={VIEWPORT}
+          className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6"
+        >
           {quick.map(({ l, i: Icon }) => (
-            <button key={l} className="flex items-center justify-center gap-2 rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-3 text-[11px] text-slate-300 transition-colors hover:bg-white/5">
+            <motion.button
+              key={l}
+              variants={item}
+              className="flex items-center justify-center gap-2 rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-3 text-[11px] text-slate-300 transition-colors hover:bg-white/5"
+            >
               <Icon className="h-4 w-4 shrink-0 text-slate-400" /> {l}
-            </button>
+            </motion.button>
           ))}
-        </div>
+        </motion.div>
       </section>
     </div>
   )

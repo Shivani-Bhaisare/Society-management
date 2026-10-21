@@ -14,10 +14,13 @@ import {
 } from 'lucide-react'
 import { useRouter, usePathname } from 'next/navigation'
 
-const roleInfo: Record<string, { name: string; initials: string; title: string }> = {
-  president: { name: 'Rahul Sharma', initials: 'RS', title: 'Society Administrator' },
-  secretary: { name: 'Priya Verma', initials: 'PV', title: 'Secretary' },
-  treasurer: { name: 'Amit Joshi', initials: 'AJ', title: 'Treasurer' },
+type TopUser = { name: string; initials: string; title: string }
+
+// Default user - sab roles/pages par yehi dikhega
+const defaultUser: TopUser = {
+  name: 'Rahul Sharma',
+  initials: 'RS',
+  title: 'Society Administrator',
 }
 
 // "society-master" -> "Society Master"
@@ -27,16 +30,29 @@ const formatPage = (s: string) =>
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
 
-export default function Topnavbar({ onMenuClick }: { onMenuClick: () => void }) {
+export default function Topnavbar({
+  onMenuClick,
+  user = defaultUser,
+}: {
+  onMenuClick: () => void
+  user?: TopUser
+}) {
   const router = useRouter()
   const pathname = usePathname()
   const [profileOpen, setProfileOpen] = useState(false)
 
-  // /president/society-master -> role = president, page = Society Master
+  // /secretary/society-master -> page = Society Master
   const segments = pathname.split('/').filter(Boolean)
-  const role = segments[0] || 'president'
   const page = formatPage(segments[1] || 'dashboard')
-  const user = roleInfo[role] ?? roleInfo.president
+
+  // URL se panel nikalo: /secretary/dashboard -> "secretary"
+  const role = segments[0] || 'secretary'
+
+  // My Profile / Settings click par apne panel ka page khulega
+  const goTo = (path: 'profile' | 'settings') => {
+    setProfileOpen(false)
+    router.push(`/${role}/${path}`)
+  }
 
   // Esc se dropdown band
   useEffect(() => {
@@ -154,10 +170,20 @@ export default function Topnavbar({ onMenuClick }: { onMenuClick: () => void }) 
                   <p className="text-[10px] text-slate-400">{user.title}</p>
                 </div>
 
-                <button className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-300 transition-colors hover:bg-white/5">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => goTo('profile')}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-300 transition-colors hover:bg-white/5"
+                >
                   <User className="h-4 w-4" /> My Profile
                 </button>
-                <button className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-300 transition-colors hover:bg-white/5">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => goTo('settings')}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-300 transition-colors hover:bg-white/5"
+                >
                   <Settings className="h-4 w-4" /> Settings
                 </button>
                 <div className="my-1 h-px bg-[#272D39]" />

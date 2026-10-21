@@ -1,4 +1,7 @@
+'use client'
+
 import type { IconType } from 'react-icons'
+import { motion, type Variants } from 'framer-motion'
 import {
   FiArrowRight,
   FiFileText,
@@ -55,43 +58,96 @@ const roles: Role[] = [
   },
 ]
 
+// Heading block: label, heading and paragraph appear one after another
+const header: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.15 } },
+}
+
+// Text fades in while moving up
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 30 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut' } },
+}
+
+// Cards grid: cards rise up one by one
+const grid: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.1, delayChildren: 0.1 } },
+}
+
+const card: Variants = {
+  hidden: { opacity: 0, y: 40, scale: 0.95 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.6, ease: 'easeOut' },
+  },
+}
+
 const RoleExperience = () => {
   return (
-    <section className="w-full bg-[#FDFDFC] py-12 sm:py-14 lg:py-16">
+    <section className="w-full overflow-hidden bg-[#FDFDFC] py-12 sm:py-14 lg:py-16">
       <div className="mx-auto max-w-[1440px] px-5 sm:px-10 lg:px-24">
-        {/* Heading */}
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 sm:text-[11px]">
+        {/* Heading: replays every time it enters the screen (scroll up or down) */}
+        <motion.div
+          variants={header}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: false, amount: 0.5 }}
+        >
+          <motion.p
+            variants={fadeUp}
+            className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 sm:text-[11px]"
+          >
             Role-Based Experience
-          </p>
+          </motion.p>
 
-          <h2 className="mt-3 text-3xl font-bold leading-[1.1] tracking-tight text-[#0B1330] sm:text-4xl lg:mt-4 lg:text-[56px]">
+          <motion.h2
+            variants={fadeUp}
+            className="mt-3 text-3xl font-bold leading-[1.1] tracking-tight text-[#0B1330] sm:text-4xl lg:mt-4 lg:text-[56px]"
+          >
             One Platform.
             <br />
             Different Experiences
-          </h2>
+          </motion.h2>
 
-          <p className="mt-4 max-w-[520px] text-xs leading-5 text-slate-500 sm:text-sm lg:mt-5">
+          <motion.p
+            variants={fadeUp}
+            className="mt-4 max-w-[520px] text-xs leading-5 text-slate-500 sm:text-sm lg:mt-5"
+          >
             Every person gets the tools and information they need for their
             role.
-          </p>
-        </div>
+          </motion.p>
+        </motion.div>
 
-        {/* Cards */}
-        <ul className="mt-8 grid grid-cols-1 gap-4 sm:mt-10 md:grid-cols-2 lg:grid-cols-3 lg:gap-5">
+        {/* Cards: also replays on every scroll */}
+        <motion.ul
+          variants={grid}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: false, amount: 0.15 }}
+          className="mt-8 grid grid-cols-1 gap-4 sm:mt-10 md:grid-cols-2 lg:grid-cols-3 lg:gap-5"
+        >
           {roles.map(({ no, title, desc, icon: Icon }) => (
-            <li
+            <motion.li
               key={no}
-              className="group relative rounded-xl border border-gray-200 bg-[#FAFAF5] p-5 transition hover:border-blue-200 hover:bg-white hover:shadow-[0_8px_30px_rgba(37,99,235,0.08)]"
+              variants={card}
+              className="group relative rounded-xl border border-gray-200 bg-[#FAFAF5] p-5 transition-[translate,border-color,background-color,box-shadow] duration-300 hover:-translate-y-2 hover:border-blue-200 hover:bg-white hover:shadow-[0_8px_30px_rgba(37,99,235,0.12)]"
             >
               {/* Number */}
               <span className="absolute right-4 top-4 text-[10px] font-medium text-[#2563EB]">
                 {no}
               </span>
 
-              {/* Icon box */}
-              <div className="flex h-12 w-12 items-center justify-center rounded-bl-[12px] rounded-tr-[12px] bg-[#E5ECFB]">
-                <Icon size={20} className="text-[#2563EB]" aria-hidden="true" />
+              {/* Icon box: turns blue and the icon turns white on card hover */}
+              <div className="flex h-12 w-12 items-center justify-center rounded-bl-[12px] rounded-tr-[12px] bg-[#E5ECFB] transition-colors duration-300 group-hover:bg-[#2563EB]">
+                <Icon
+                  size={20}
+                  className="text-[#2563EB] transition-colors duration-300 group-hover:text-white"
+                  aria-hidden="true"
+                />
               </div>
 
               {/* Title */}
@@ -102,7 +158,7 @@ const RoleExperience = () => {
               {/* Description */}
               <p className="mt-2 text-xs leading-5 text-gray-500">{desc}</p>
 
-              {/* Explore link */}
+              {/* Explore link: arrow moves right on card hover */}
               <a
                 href="#"
                 className="mt-4 inline-flex items-center gap-1 text-[11px] font-semibold text-[#2563EB]"
@@ -110,13 +166,13 @@ const RoleExperience = () => {
                 Explore
                 <FiArrowRight
                   size={12}
-                  className="transition-transform group-hover:translate-x-1"
+                  className="transition-transform duration-300 group-hover:translate-x-1"
                   aria-hidden="true"
                 />
               </a>
-            </li>
+            </motion.li>
           ))}
-        </ul>
+        </motion.ul>
       </div>
     </section>
   )
