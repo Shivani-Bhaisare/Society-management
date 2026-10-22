@@ -15,6 +15,7 @@ import {
   User, Home, Building2, Folder, Pencil, UserCog, Droplets, Zap, ArrowUpDown,
   Volume2, ShieldCheck, Sparkles, ClipboardList, Flag, Paperclip, type LucideIcon,
 } from 'lucide-react'
+import { complaintSchema } from '@/lib/validations/complaint.schema' // NEW
 
 /* ---------- Config ---------- */
 
@@ -296,16 +297,22 @@ function Body({
     if (valid.length) setFiles((p) => [...p, ...valid])
   }
 
+  // NEW: validation now runs through the zod schema
   function validate() {
+    const result = complaintSchema.safeParse({
+      title, resident, flat, tower, category, priority, date, assignedTo, description,
+    })
+
     const err: Record<string, string> = {}
-    if (!title.trim()) err.title = 'Complaint title is required'
-    if (!resident) err.resident = 'Select a resident'
-    if (!flat) err.flat = 'Select a flat'
-    if (!category) err.category = 'Select a category'
-    if (!date) err.date = 'Date is required'
-    if (!description.trim()) err.description = 'Description is required'
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        const key = String(issue.path[0])
+        if (!err[key]) err[key] = issue.message
+      }
+    }
+
     setErrors(err)
-    return Object.keys(err).length === 0
+    return result.success
   }
 
   function submit(ev: FormEvent) {

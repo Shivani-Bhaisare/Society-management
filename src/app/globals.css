@@ -67,3 +67,10 @@ body {
   scrollbar-width: none;
 }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+html {
+  scroll-behavior: smooth;
+}
+
+section[id] {
+  scroll-margin-top: 96px;
+}

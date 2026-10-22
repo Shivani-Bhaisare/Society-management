@@ -334,19 +334,19 @@ export default function ComplaintsPage() {
         </motion.div>
       </motion.div>
 
-      {/* Stat cards (same size as Residents cards) */}
+      {/* Stat cards (same size as President dashboard cards) */}
       <motion.div
         variants={container}
         initial="hidden"
         whileInView="show"
         viewport={VIEWPORT}
-        className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-3"
+        className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-4"
       >
         {stats.map(({ label, value, icon: Icon, c }) => (
           <motion.div
             key={label}
             variants={item}
-            className="relative min-h-[127px] overflow-hidden rounded-xl border border-[#272D39] bg-[#10131A] p-4"
+            className="relative min-h-32.25 overflow-hidden rounded-xl border border-[#272D39] bg-[#10131A] p-4"
           >
             <div className="flex items-center gap-2">
               <span

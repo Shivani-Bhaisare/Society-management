@@ -1,35 +1,35 @@
-'use client'
+"use client";
 
-import { motion, type Variants } from 'framer-motion'
-import { FiUsers, FiChevronRight } from 'react-icons/fi'
+import { motion, type Variants } from "framer-motion";
+import { FiUsers, FiChevronRight } from "react-icons/fi";
 
 const steps = [
-  'Resident',
-  'Complaint',
-  'Category',
-  'Assigned Staff',
-  'Work in Progress',
-  'Resolved',
-  'Feedback',
-]
+  "Resident",
+  "Complaint",
+  "Category",
+  "Assigned Staff",
+  "Work in Progress",
+  "Resolved",
+  "Feedback",
+];
 
 // Header block: label, heading and paragraph appear one after another
 const header: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.15 } },
-}
+};
 
 // Text fades in while moving up
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 30 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut' } },
-}
+  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } },
+};
 
 // Steps list: steps pop in one by one, left to right
 const stepsList: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.12, delayChildren: 0.2 } },
-}
+};
 
 const stepItem: Variants = {
   hidden: { opacity: 0, y: 30, scale: 0.8 },
@@ -37,19 +37,26 @@ const stepItem: Variants = {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { duration: 0.5, ease: 'easeOut' },
+    transition: { duration: 0.5, ease: "easeOut" },
   },
-}
+};
 
 // Arrow between steps: slides in from the left after its step appears
 const arrowVariant: Variants = {
   hidden: { opacity: 0, x: -10 },
-  show: { opacity: 1, x: 0, transition: { duration: 0.4, ease: 'easeOut', delay: 0.2 } },
-}
+  show: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.4, ease: "easeOut", delay: 0.2 },
+  },
+};
 
 const Complaints = () => {
   return (
-    <section className="w-full overflow-hidden bg-[#FDFDFB] py-12 sm:py-16 lg:py-20">
+    <section
+      id="solutions"
+      className="w-full overflow-hidden bg-[#FDFDFB] py-12 sm:py-16 lg:py-20"
+    >
       <div className="mx-auto max-w-[1440px] px-5 sm:px-10 lg:px-24">
         {/* Header: replays every time it enters the screen (scroll up or down) */}
         <motion.div
@@ -122,7 +129,7 @@ const Complaints = () => {
         </motion.ol>
       </div>
     </section>
-  )
-}
+  );
+};
 
-export default Complaints
+export default Complaints;

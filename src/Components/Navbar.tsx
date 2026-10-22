@@ -6,7 +6,15 @@ import Link from 'next/link'
 import { motion, type Variants } from 'framer-motion'
 import Button from '../Components/Button'
 
-const links = ['Home', 'Platform', 'Solutions', 'For Residents', 'For Management', 'Resources']
+// Each link points to a section id on the home page (Home = hero section)
+const links = [
+  { label: 'Home', href: '/#home' },
+  { label: 'Platform', href: '/#platform' },
+  { label: 'Solutions', href: '/#solutions' },
+  { label: 'For Residents', href: '/#residents' },
+  { label: 'For Management', href: '/#management' },
+  { label: 'Resources', href: '/#resources' },
+]
 
 // public/logo (2).png (%20 is used because of the space in the file name)
 const LOGO_SRC = '/logo%20(2).png'
@@ -57,7 +65,7 @@ const Navbar = () => {
       >
         {/* Logo: image logo (40x40) + brand name */}
         <motion.div variants={itemVariants}>
-          <Link href="/" className="group flex items-center gap-2">
+          <Link href="/#home" className="group flex items-center gap-2">
             {/* Logo rotates and scales slightly when hovered */}
             <Image
               src={LOGO_SRC}
@@ -73,14 +81,14 @@ const Navbar = () => {
 
         {/* Links */}
         <ul className="hidden items-center gap-8 lg:flex">
-          {links.map((item) => (
-            <motion.li key={item} variants={itemVariants}>
+          {links.map(({ label, href }) => (
+            <motion.li key={label} variants={itemVariants}>
               {/* Underline grows from left to right on hover */}
               <Link
-                href="#"
+                href={href}
                 className="group relative inline-block py-1 text-sm text-white/80 transition-colors duration-300 hover:text-white"
               >
-                {item}
+                {label}
                 <span className="absolute bottom-0 left-0 h-px w-full origin-left scale-x-0 bg-white transition-transform duration-300 ease-out group-hover:scale-x-100" />
               </Link>
             </motion.li>

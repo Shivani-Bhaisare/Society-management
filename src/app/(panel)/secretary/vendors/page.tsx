@@ -333,13 +333,13 @@ export default function VendorsPage() {
         </motion.div>
       </motion.div>
 
-      {/* Stat cards (same card size as Dashboard cards) */}
+      {/* Stat cards (same card size as President dashboard cards) */}
       <motion.div
         variants={container}
         initial="hidden"
         whileInView="show"
         viewport={VIEWPORT}
-        className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-3"
+        className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-4"
       >
         {stats.map(({ label, value, icon: Icon, c }) => (
           <motion.div

@@ -178,7 +178,7 @@ export default function MaintenanceBillingPage() {
         initial="hidden"
         whileInView="show"
         viewport={VIEWPORT}
-        className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-3"
+        className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-4"
       >
         {stats.map(({ label, value, sub, subC, icon: Icon, c }) => (
           <motion.div

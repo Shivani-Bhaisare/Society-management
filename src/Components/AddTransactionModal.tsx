@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   ElementType,
   InputHTMLAttributes,
@@ -14,6 +14,16 @@ import {
   Paperclip, ClipboardList, IndianRupee, Wallet, TrendingUp, TrendingDown, Tag,
   User, Hash, CreditCard, Building2, StickyNote,
 } from 'lucide-react'
+import {
+  transactionSchema,
+  transactionDraftSchema,
+  validateReceipt,
+  todayISO,
+  MAX_TITLE,
+  MAX_PARTY,
+  MAX_REFERENCE,
+  MAX_NOTES,
+} from '@/lib/validations/transaction.schema'
 
 /* ---------- Config ---------- */
 
@@ -29,8 +39,6 @@ const EXPENSE_CATEGORIES = [
 const PAYMENT_MODES = ['Cash', 'UPI', 'Bank Transfer', 'Cheque', 'Card']
 const STATUSES = ['Completed', 'Pending']
 const WINGS = ['All / Common', 'A Wing', 'B Wing', 'C Wing', 'D Wing']
-
-const MAX_NOTES = 500
 
 type TxnType = 'Income' | 'Expense'
 
@@ -53,7 +61,6 @@ export type TransactionPayload = {
 const noScrollbar =
   '[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'
 
-const toISO = (d: Date) => d.toISOString().split('T')[0]
 const fmt = (iso: string) =>
   iso
     ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -93,7 +100,7 @@ function IconInput({
   return (
     <div className="relative">
       <Icon className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-500" />
-      <input {...props} className={inputCls(true, error)} />
+      <input {...props} aria-invalid={error || undefined} className={inputCls(true, error)} />
     </div>
   )
 }
@@ -112,6 +119,7 @@ function IconSelect({
       <Icon className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-500" />
       <select
         {...props}
+        aria-invalid={error || undefined}
         className={`${inputCls(true, error)} appearance-none pr-7 ${empty ? 'text-slate-500' : ''}`}
       >
         {placeholder && (
@@ -136,6 +144,7 @@ function DateInput({
         type="date"
         value={value}
         {...props}
+        aria-invalid={error || undefined}
         className={`${inputCls(true, error)} scheme-dark ${value ? '' : 'text-slate-500'}`}
       />
     </div>
@@ -188,7 +197,7 @@ function Body({
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState(INCOME_CATEGORIES[0])
   const [amount, setAmount] = useState('')
-  const [date, setDate] = useState(toISO(new Date()))
+  const [date, setDate] = useState(todayISO())
   const [paymentMode, setPaymentMode] = useState('UPI')
   const [reference, setReference] = useState('')
   const [party, setParty] = useState('')
@@ -199,8 +208,13 @@ function Body({
   const [fileError, setFileError] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  // Used to focus the first invalid field after a failed submit
+  const bodyRef = useRef<HTMLDivElement>(null)
+
   const isIncome = type === 'Income'
   const categories = isIncome ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+  const refRequired = paymentMode !== 'Cash'
+  const today = todayISO()
 
   // Lock background page scroll while the drawer is open + close on Esc
   useEffect(() => {
@@ -233,30 +247,52 @@ function Body({
   function pickFile(list: FileList | null) {
     const f = list?.[0]
     if (!f) return
-    const okType = /\.(pdf|jpe?g|png)$/i.test(f.name)
-    const okSize = f.size <= 10 * 1024 * 1024
-    if (okType && okSize) {
+    const msg = validateReceipt(f)
+    if (msg) {
+      setFileError(msg)
+    } else {
       setFile(f)
       setFileError('')
-    } else {
-      setFileError('Only PDF, JPG, PNG files up to 10 MB are allowed')
     }
   }
 
+  // Validate with the zod schema (draft = title only)
   function validate(asDraft: boolean) {
+    const values = {
+      type, title, category, amount, date, paymentMode,
+      reference, party, wing, notes, status,
+    }
+    const result = (asDraft ? transactionDraftSchema : transactionSchema).safeParse(values)
+
+    if (result.success) {
+      setErrors({})
+      return true
+    }
+
+    // Keep only the first message for every field
     const err: Record<string, string> = {}
-    if (!title.trim()) err.title = 'Transaction title is required'
-    if (!asDraft) {
-      if (!amount || Number(amount) <= 0) err.amount = 'Enter a valid amount'
-      if (!date) err.date = 'Date is required'
-      if (!category) err.category = 'Category is required'
+    for (const issue of result.error.issues) {
+      const key = String(issue.path[0] ?? '')
+      if (key && !err[key]) err[key] = issue.message
     }
     setErrors(err)
-    return Object.keys(err).length === 0
+    return false
+  }
+
+  // Scroll to and focus the first invalid field
+  function focusFirstError() {
+    setTimeout(() => {
+      const el = bodyRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el?.focus({ preventScroll: true })
+    }, 50)
   }
 
   function save(asDraft: boolean) {
-    if (!validate(asDraft)) return
+    if (!validate(asDraft)) {
+      focusFirstError()
+      return
+    }
     // TODO: call the API here
     onSave?.({
       id: Date.now(),
@@ -322,7 +358,10 @@ function Body({
         </div>
 
         {/* Body */}
-        <div className={`mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 text-white sm:px-4 ${noScrollbar}`}>
+        <div
+          ref={bodyRef}
+          className={`mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 text-white sm:px-4 ${noScrollbar}`}
+        >
           <div className="rounded-xl border border-[#272D39] p-3.5">
             {/* Section 1: Transaction Details */}
             <SectionHead first icon={ClipboardList} title="Transaction Details" sub="Type, title and category" />
@@ -359,6 +398,7 @@ function Body({
                 <IconInput
                   icon={FileText}
                   value={title}
+                  maxLength={MAX_TITLE}
                   onChange={(e) => { setTitle(e.target.value); clearErr('title') }}
                   error={!!errors.title}
                   placeholder={isIncome ? 'e.g. October maintenance' : 'e.g. Security salary'}
@@ -385,7 +425,13 @@ function Body({
                   icon={IndianRupee}
                   type="number"
                   min="0"
+                  step="0.01"
+                  inputMode="decimal"
                   value={amount}
+                  onKeyDown={(e) => {
+                    // Block characters that are valid in number inputs but not in an amount
+                    if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault()
+                  }}
                   onChange={(e) => { setAmount(e.target.value); clearErr('amount') }}
                   error={!!errors.amount}
                   placeholder="e.g. 25000"
@@ -395,6 +441,7 @@ function Body({
               <Field label="Transaction Date" error={errors.date}>
                 <DateInput
                   value={date}
+                  max={today}
                   onChange={(e) => { setDate(e.target.value); clearErr('date') }}
                   error={!!errors.date}
                 />
@@ -402,20 +449,31 @@ function Body({
             </div>
 
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Payment Mode">
+              <Field label="Payment Mode" error={errors.paymentMode}>
                 <IconSelect
                   icon={CreditCard}
                   value={paymentMode}
-                  onChange={(e) => setPaymentMode(e.target.value)}
+                  onChange={(e) => {
+                    setPaymentMode(e.target.value)
+                    clearErr('paymentMode')
+                    clearErr('reference')
+                  }}
+                  error={!!errors.paymentMode}
                   options={PAYMENT_MODES}
                 />
               </Field>
 
-              <Field label="Reference No." hint="Optional">
+              <Field
+                label="Reference No."
+                hint={refRequired ? undefined : 'Optional'}
+                error={errors.reference}
+              >
                 <IconInput
                   icon={Hash}
                   value={reference}
-                  onChange={(e) => setReference(e.target.value)}
+                  maxLength={MAX_REFERENCE}
+                  onChange={(e) => { setReference(e.target.value); clearErr('reference') }}
+                  error={!!errors.reference}
                   placeholder="UPI ID / Cheque / Txn no."
                 />
               </Field>
@@ -429,11 +487,17 @@ function Body({
             />
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label={isIncome ? 'Received From' : 'Paid To'} hint="Optional">
+              <Field
+                label={isIncome ? 'Received From' : 'Paid To'}
+                hint="Optional"
+                error={errors.party}
+              >
                 <IconInput
                   icon={User}
                   value={party}
-                  onChange={(e) => setParty(e.target.value)}
+                  maxLength={MAX_PARTY}
+                  onChange={(e) => { setParty(e.target.value); clearErr('party') }}
+                  error={!!errors.party}
                   placeholder={isIncome ? 'e.g. Raj Sharma (A-101)' : 'e.g. ABC Security Services'}
                 />
               </Field>
@@ -451,7 +515,7 @@ function Body({
             {/* Section 4: Notes */}
             <SectionHead icon={StickyNote} title="Notes" sub="Extra details about this transaction" />
 
-            <Field label="Description" hint="Optional">
+            <Field label="Description" hint="Optional" error={errors.notes}>
               <div className="overflow-hidden rounded-md border border-[#272D39] bg-[#0B0E14] transition-colors focus-within:border-[#6C63FF]">
                 <textarea
                   value={notes}
@@ -507,11 +571,12 @@ function Body({
                 <p className="mt-1 text-[9px] text-slate-500">Supported formats: PDF, JPG, PNG (Max 10MB)</p>
               </Field>
 
-              <Field label="Status">
+              <Field label="Status" error={errors.status}>
                 <IconSelect
                   icon={Send}
                   value={status}
-                  onChange={(e) => setStatus(e.target.value)}
+                  onChange={(e) => { setStatus(e.target.value); clearErr('status') }}
+                  error={!!errors.status}
                   options={STATUSES}
                 />
               </Field>

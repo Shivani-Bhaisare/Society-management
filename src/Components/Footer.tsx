@@ -136,7 +136,7 @@ const bottomItem: Variants = {
 
 const Footer = () => {
   return (
-    <footer className="w-full overflow-hidden bg-[#02040E]">
+    <footer id="resources" className="w-full overflow-hidden bg-[#02040E]">
       <div className="mx-auto max-w-[1440px] px-5 pb-4 pt-8 sm:px-10 sm:pt-10 lg:px-24 lg:pt-12">
         {/* Top: brand + link columns (replays every time it enters the screen) */}
         <motion.div

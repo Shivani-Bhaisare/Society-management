@@ -15,6 +15,7 @@ import {
   FileText, UploadCloud, Trash2, Plus, Wrench, ShieldCheck, CalendarDays, ImageIcon,
   ClipboardList, Timer, CalendarCheck, Power,
 } from 'lucide-react'
+import { facilitySchema } from '@/lib/validations/facility.schema' // NEW
 
 /* ---------- Config ---------- */
 
@@ -296,22 +297,26 @@ function Body({
     setPreview('')
   }
 
+  // NEW: validation now runs through the zod schema
   function validate() {
+    const result = facilitySchema.safeParse({
+      name, category, description, location, capacity,
+      openingTime, closingTime, days, bookingRequired, charges,
+      rules, mFrom, mTo,
+    })
+
     const err: Record<string, string> = {}
-    if (!name.trim()) err.name = 'Facility name is required'
-    if (!category) err.category = 'Select a category'
-    if (capacity && (!/^\d+$/.test(capacity) || Number(capacity) < 1))
-      err.capacity = 'Enter a valid number'
-    if (TIMES.indexOf(closingTime) <= TIMES.indexOf(openingTime))
-      err.closingTime = 'Closing time must be after opening time'
-    if (days.length === 0) err.days = 'Select at least one day'
-    if (bookingRequired && charges && !/^\d+(\.\d{1,2})?$/.test(charges))
-      err.charges = 'Enter a valid amount'
-    if (mFrom && mTo && mTo < mFrom) err.mTo = 'End date must be after start date'
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        const key = String(issue.path[0])
+        if (!err[key]) err[key] = issue.message
+      }
+    }
+
     setErrors(err)
     // Open the maintenance panel if its error would be hidden
     if (err.mTo) setOpenPanel('maintenance')
-    return Object.keys(err).length === 0
+    return result.success
   }
 
   function submit(ev: FormEvent) {

@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { motion, type Variants } from 'framer-motion'
+import Link from "next/link";
+import { motion, type Variants } from "framer-motion";
 import {
   ArrowRight,
   ShieldCheck,
@@ -12,74 +12,74 @@ import {
   CalendarDays,
   ClipboardCheck,
   Bell,
-} from 'lucide-react'
-import { HiOutlineUserGroup } from 'react-icons/hi'
+} from "lucide-react";
+import { HiOutlineUserGroup } from "react-icons/hi";
 
 const modules = [
   {
-    title: 'Society & Resident Management',
-    desc: 'Centralize unit records, ownership details and resident profiles in a structured digital directory.',
+    title: "Society & Resident Management",
+    desc: "Centralize unit records, ownership details and resident profiles in a structured digital directory.",
     icon: HiOutlineUserGroup,
   },
   {
-    title: 'Security & Visitor Management',
-    desc: 'Digitize gate entries, pre-approvals, visitor logs and delivery tracking in real time.',
+    title: "Security & Visitor Management",
+    desc: "Digitize gate entries, pre-approvals, visitor logs and delivery tracking in real time.",
     icon: ShieldCheck,
   },
   {
-    title: 'Maintenance & Billing',
-    desc: 'Automate maintenance billing cycles, collection tracking and digital receipts.',
+    title: "Maintenance & Billing",
+    desc: "Automate maintenance billing cycles, collection tracking and digital receipts.",
     icon: IndianRupee,
   },
   {
-    title: 'Accounting & Finance',
-    desc: 'Track income, expenses, vendor payments and financial records from one place.',
+    title: "Accounting & Finance",
+    desc: "Track income, expenses, vendor payments and financial records from one place.",
     icon: CircleDollarSign,
   },
   {
-    title: 'Complaints & Helpdesk',
-    desc: 'Structured complaint tracking with category assignment, staff routing and resolution status.',
+    title: "Complaints & Helpdesk",
+    desc: "Structured complaint tracking with category assignment, staff routing and resolution status.",
     icon: Headphones,
   },
   {
-    title: 'Parking & Vehicles',
-    desc: 'Manage parking allocations, vehicle registrations and visitor parking digitally.',
+    title: "Parking & Vehicles",
+    desc: "Manage parking allocations, vehicle registrations and visitor parking digitally.",
     icon: Car,
   },
   {
-    title: 'Amenities & Facilities',
-    desc: 'Booking management for clubhouses, gyms, pools and shared community spaces.',
+    title: "Amenities & Facilities",
+    desc: "Booking management for clubhouses, gyms, pools and shared community spaces.",
     icon: CalendarDays,
   },
   {
-    title: 'Staff & Vendor Management',
-    desc: 'Profiles, attendance, contracts and service history for staff and service providers.',
+    title: "Staff & Vendor Management",
+    desc: "Profiles, attendance, contracts and service history for staff and service providers.",
     icon: ClipboardCheck,
   },
   {
-    title: 'Communication & Community',
-    desc: 'Targeted notices, announcements and updates across resident groups and security teams.',
+    title: "Communication & Community",
+    desc: "Targeted notices, announcements and updates across resident groups and security teams.",
     icon: Bell,
   },
-]
+];
 
 // Header block: label, heading and paragraph appear one after another
 const header: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.15 } },
-}
+};
 
 // Text fades in while moving up
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 30 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut' } },
-}
+  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } },
+};
 
 // Cards grid: cards pop in one by one
 const grid: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.1, delayChildren: 0.1 } },
-}
+};
 
 const card: Variants = {
   hidden: { opacity: 0, y: 40, scale: 0.95 },
@@ -87,13 +87,16 @@ const card: Variants = {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { duration: 0.6, ease: 'easeOut' },
+    transition: { duration: 0.6, ease: "easeOut" },
   },
-}
+};
 
 const Platform = () => {
   return (
-    <section className="w-full overflow-hidden bg-[#F8FAFD] py-16">
+    <section
+      id="platform"
+      className="w-full overflow-hidden bg-[#F8FAFD] py-16"
+    >
       <div className="mx-auto max-w-[1440px] px-10 lg:px-24">
         {/* Header: replays every time it enters the screen (scroll up or down) */}
         <motion.div
@@ -123,8 +126,8 @@ const Platform = () => {
             variants={fadeUp}
             className="mt-5 max-w-[420px] text-sm leading-6 text-gray-500"
           >
-            SocietyOS connects the operational systems behind a modern residential
-            community.
+            SocietyOS connects the operational systems behind a modern
+            residential community.
           </motion.p>
         </motion.div>
 
@@ -144,7 +147,7 @@ const Platform = () => {
             >
               {/* Number */}
               <span className="absolute right-4 top-4 text-[10px] font-medium text-[#2563EB]">
-                {String(index + 1).padStart(2, '0')}
+                {String(index + 1).padStart(2, "0")}
               </span>
 
               {/* Icon box: turns blue and the icon turns white on card hover */}
@@ -180,7 +183,7 @@ const Platform = () => {
         </motion.div>
       </div>
     </section>
-  )
-}
+  );
+};
 
-export default Platform
+export default Platform;

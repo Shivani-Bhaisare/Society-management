@@ -15,6 +15,7 @@ import {
   FileText, Copy, Check, UploadCloud, Trash2, Plus, ShieldCheck, Repeat, ClipboardList,
   FolderOpen, StickyNote, UserCog,
 } from 'lucide-react'
+import { assetSchema } from '@/lib/validations/asset.schema' // NEW
 
 /* ---------- Config ---------- */
 
@@ -325,29 +326,25 @@ function Body({
     if (valid.length) setDocs((p) => [...p, ...valid])
   }
 
+  // NEW: validation now runs through the zod schema
   function validate() {
+    const result = assetSchema.safeParse({
+      name, category, location, purchaseDate, purchaseCost, vendor,
+      warrantyStart, warrantyEnd,
+      amcOn, amcVendor, contractStart, contractEnd,
+      frequency, lastService, nextService, status,
+    })
+
     const err: Record<string, string> = {}
-    if (!name.trim()) err.name = 'Asset name is required'
-    if (!category) err.category = 'Select a category'
-    if (!location) err.location = 'Select a location'
-    if (!purchaseDate) err.purchaseDate = 'Purchase date is required'
-    if (!purchaseCost) err.purchaseCost = 'Purchase cost is required'
-    if (!vendor) err.vendor = 'Select a vendor'
-    if (warrantyStart && warrantyEnd && warrantyEnd < warrantyStart)
-      err.warrantyEnd = 'End must be after start'
-    if (amcOn) {
-      if (!amcVendor) err.amcVendor = 'Select an AMC vendor'
-      if (!contractStart) err.contractStart = 'Start date is required'
-      if (!contractEnd) err.contractEnd = 'End date is required'
-      if (contractStart && contractEnd && contractEnd < contractStart)
-        err.contractEnd = 'End must be after start'
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        const key = String(issue.path[0])
+        if (!err[key]) err[key] = issue.message
+      }
     }
-    if (!frequency) err.frequency = 'Select a frequency'
-    if (lastService && nextService && nextService < lastService)
-      err.nextService = 'Must be after last service'
-    if (!status) err.status = 'Select a status'
+
     setErrors(err)
-    return Object.keys(err).length === 0
+    return result.success
   }
 
   function submit(ev: FormEvent) {

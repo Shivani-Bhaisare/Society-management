@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type {
+  DragEvent,
   FormEvent,
   InputHTMLAttributes,
   ReactNode,
@@ -13,16 +14,19 @@ import {
   X, ChevronDown, Upload, UploadCloud, FileText, Trash2, CalendarDays, Folder, Eye,
   Bell, ClipboardList, Paperclip, Tag, Lock, type LucideIcon,
 } from 'lucide-react'
+import {
+  documentSchema,
+  validateDocumentFile,
+  todayISO,
+  CATEGORIES,
+  VISIBILITY,
+  ACCEPT,
+  MAX_MB,
+  MAX_DESC,
+  MAX_TITLE,
+} from '@/lib/validations/document.schema'
 
 /* ---------- Config ---------- */
-
-// TODO: fetch these from the API later
-const CATEGORIES = ['Society', 'Legal', 'Finance', 'Meeting', 'Vendor', 'Maintenance']
-const VISIBILITY = ['All Residents', 'Committee Members', 'Admin Only']
-
-const ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png'
-const MAX_MB = 10
-const MAX_DESC = 300
 
 export type DocumentPayload = {
   id: number
@@ -37,8 +41,6 @@ export type DocumentPayload = {
 
 const noScrollbar =
   '[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'
-
-const toISO = (d: Date) => d.toISOString().split('T')[0]
 
 const fmtSize = (bytes: number) =>
   bytes >= 1024 * 1024
@@ -62,17 +64,18 @@ const inputCls = (icon = false, error = false) =>
   } ${icon ? 'pl-8 pr-2.5' : 'px-2.5'}`
 
 function Field({
-  label, hint, error, className = '', children,
+  label, hint, error, htmlFor, className = '', children,
 }: {
   label: string
   hint?: string
   error?: string
+  htmlFor?: string
   className?: string
   children: ReactNode
 }) {
   return (
     <div className={`min-w-0 ${className}`}>
-      <label className="mb-1 block text-[10px] text-slate-400">
+      <label htmlFor={htmlFor} className="mb-1 block text-[10px] text-slate-400">
         {label} {hint && <span className="text-slate-500">({hint})</span>}
       </label>
       {children}
@@ -87,7 +90,7 @@ function IconInput({
   return (
     <div className="relative">
       <Icon className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-500" />
-      <input {...props} className={inputCls(true, error)} />
+      <input {...props} aria-invalid={error || undefined} className={inputCls(true, error)} />
     </div>
   )
 }
@@ -97,7 +100,7 @@ function IconSelect({
 }: {
   icon: LucideIcon
   placeholder?: string
-  options: string[]
+  options: readonly string[]
   error?: boolean
 } & SelectHTMLAttributes<HTMLSelectElement>) {
   const empty = !props.value
@@ -106,6 +109,7 @@ function IconSelect({
       <Icon className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-500" />
       <select
         {...props}
+        aria-invalid={error || undefined}
         className={`${inputCls(true, error)} appearance-none pr-7 ${empty ? 'text-slate-500' : ''}`}
       >
         {placeholder && (
@@ -140,12 +144,15 @@ function SectionHead({
   )
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function Toggle({
+  checked, onChange, label,
+}: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={label}
       onClick={() => onChange(!checked)}
       className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full border transition-colors ${
         checked ? 'border-[#6C63FF] bg-[#6C63FF]' : 'border-[#272D39] bg-[#0B0E14]'
@@ -184,13 +191,25 @@ function Body({
 }) {
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState('')
-  const [date, setDate] = useState(toISO(new Date()))
+  const [date, setDate] = useState(todayISO())
   const [visibility, setVisibility] = useState('All Residents')
   const [description, setDescription] = useState('')
   const [notify, setNotify] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Used to focus the first invalid field after a failed submit
+  const bodyRef = useRef<HTMLDivElement>(null)
+
+  // FIX: stops a double click from saving the document twice
+  const submitted = useRef(false)
+
+  // FIX: unique ids so every label is linked to its input
+  const uid = useId()
+  const id = (name: string) => `${uid}-${name}`
+
+  const today = todayISO()
 
   // Lock background page scroll while the drawer is open + close on Esc
   useEffect(() => {
@@ -217,36 +236,69 @@ function Body({
   function pickFile(list: FileList | null) {
     const f = list?.[0]
     if (!f) return
-    const okType = /\.(pdf|docx?|xlsx?|jpe?g|png)$/i.test(f.name)
-    const okSize = f.size <= MAX_MB * 1024 * 1024
-    if (!okType) {
-      setErrors((p) => ({ ...p, file: 'Only PDF, DOC, XLS, JPG, PNG files are allowed' }))
-      return
-    }
-    if (!okSize) {
-      setErrors((p) => ({ ...p, file: `File size must be under ${MAX_MB} MB` }))
+    const msg = validateDocumentFile(f)
+    if (msg) {
+      setErrors((p) => ({ ...p, file: msg }))
       return
     }
     setFile(f)
     clearErr('file')
     // If the title is empty, fill it with the file name
-    if (!title.trim()) setTitle(f.name.replace(/\.[^.]+$/, ''))
-    clearErr('title')
+    if (!title.trim()) {
+      setTitle(f.name.replace(/\.[^.]+$/, '').slice(0, MAX_TITLE))
+      clearErr('title')
+    }
   }
 
+  // FIX: only turn the highlight off when the cursor really leaves the box
+  // (moving over the icon or text inside it no longer makes it flicker)
+  function onDragLeave(e: DragEvent<HTMLLabelElement>) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      setDragOver(false)
+    }
+  }
+
+  // Validate with the zod schema
   function validate() {
     const err: Record<string, string> = {}
+
     if (!file) err.file = 'Please select a document to upload'
-    if (!title.trim()) err.title = 'Document title is required'
-    if (!category) err.category = 'Select a category'
-    if (!date) err.date = 'Date is required'
+
+    const result = documentSchema.safeParse({
+      title, category, date, visibility, description,
+    })
+    if (!result.success) {
+      // Keep only the first message for every field
+      for (const issue of result.error.issues) {
+        const key = String(issue.path[0] ?? '')
+        if (key && !err[key]) err[key] = issue.message
+      }
+    }
+
     setErrors(err)
     return Object.keys(err).length === 0
   }
 
+  // Scroll to and focus the first invalid field
+  function focusFirstError() {
+    setTimeout(() => {
+      const root = bodyRef.current
+      const el =
+        root?.querySelector<HTMLElement>('[aria-invalid="true"]') ??
+        root?.querySelector<HTMLElement>('[data-file-error="true"]')
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el?.focus?.({ preventScroll: true })
+    }, 50)
+  }
+
   function submit(ev: FormEvent) {
     ev.preventDefault()
-    if (!validate() || !file) return
+    if (submitted.current) return
+    if (!validate() || !file) {
+      focusFirstError()
+      return
+    }
+    submitted.current = true
     // TODO: call the API here (send the file via FormData)
     onSave?.({
       id: Date.now(),
@@ -288,7 +340,7 @@ function Body({
             </span>
             <div className="min-w-0">
               <h2 className="text-sm font-bold text-white">Upload Document</h2>
-              <p className="text-[10px] text-slate-400">Add a document to the society's central storage</p>
+              <p className="text-[10px] text-slate-400">Add a document to the society&apos;s central storage</p>
             </div>
           </div>
           <button
@@ -302,7 +354,10 @@ function Body({
         </div>
 
         {/* Body */}
-        <div className={`mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 text-white sm:px-4 ${noScrollbar}`}>
+        <div
+          ref={bodyRef}
+          className={`mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 text-white sm:px-4 ${noScrollbar}`}
+        >
           <div className="rounded-xl border border-[#272D39] p-3.5">
             {/* Section 1: File */}
             <SectionHead first icon={Paperclip} title="Select File" sub="Choose the document you want to upload" />
@@ -310,14 +365,16 @@ function Body({
             <Field label="Document File" error={errors.file}>
               {!file ? (
                 <label
+                  tabIndex={-1}
+                  data-file-error={errors.file ? 'true' : undefined}
                   onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-                  onDragLeave={() => setDragOver(false)}
+                  onDragLeave={onDragLeave}
                   onDrop={(e) => {
                     e.preventDefault()
                     setDragOver(false)
                     pickFile(e.dataTransfer.files)
                   }}
-                  className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-[#0B0E14] px-3 py-6 text-center transition-colors hover:border-[#6C63FF] ${
+                  className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-[#0B0E14] px-3 py-6 text-center outline-none transition-colors hover:border-[#6C63FF] ${
                     dragOver ? 'border-[#6C63FF]' : errors.file ? 'border-red-500/60' : 'border-[#3A4152]'
                   }`}
                 >
@@ -363,18 +420,21 @@ function Body({
             <SectionHead icon={ClipboardList} title="Document Details" sub="Title, category and date" />
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Document Title" error={errors.title} className="sm:col-span-2">
+              <Field label="Document Title" htmlFor={id('title')} error={errors.title} className="sm:col-span-2">
                 <IconInput
+                  id={id('title')}
                   icon={FileText}
                   value={title}
+                  maxLength={MAX_TITLE}
                   onChange={(e) => { setTitle(e.target.value); clearErr('title') }}
                   error={!!errors.title}
                   placeholder="e.g. Society Registration Certificate"
                 />
               </Field>
 
-              <Field label="Category" error={errors.category}>
+              <Field label="Category" htmlFor={id('category')} error={errors.category}>
                 <IconSelect
+                  id={id('category')}
                   icon={Folder}
                   value={category}
                   onChange={(e) => { setCategory(e.target.value); clearErr('category') }}
@@ -384,14 +444,16 @@ function Body({
                 />
               </Field>
 
-              <Field label="Document Date" error={errors.date}>
+              <Field label="Document Date" htmlFor={id('date')} error={errors.date}>
                 <div className="relative">
                   <CalendarDays className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-500" />
                   <input
+                    id={id('date')}
                     type="date"
                     value={date}
-                    max={toISO(new Date())}
+                    max={today}
                     onChange={(e) => { setDate(e.target.value); clearErr('date') }}
+                    aria-invalid={!!errors.date || undefined}
                     className={`${inputCls(true, !!errors.date)} scheme-dark ${date ? '' : 'text-slate-500'}`}
                   />
                 </div>
@@ -399,16 +461,18 @@ function Body({
             </div>
 
             <div className="mt-3">
-              <Field label="Description" hint="Optional">
+              <Field label="Description" hint="Optional" htmlFor={id('desc')} error={errors.description}>
                 <div className="relative">
                   <Tag className="pointer-events-none absolute left-2.5 top-2.5 h-3 w-3 text-slate-500" />
                   <textarea
+                    id={id('desc')}
                     rows={3}
                     maxLength={MAX_DESC}
                     value={description}
-                    onChange={(e) => setDescription(e.target.value)}
+                    onChange={(e) => { setDescription(e.target.value); clearErr('description') }}
+                    aria-invalid={!!errors.description || undefined}
                     placeholder="Add a short note about this document..."
-                    className={`${inputCls(true)} resize-none ${noScrollbar}`}
+                    className={`${inputCls(true, !!errors.description)} resize-none ${noScrollbar}`}
                   />
                 </div>
                 <p className="mt-1 text-right text-[9px] text-slate-500">
@@ -421,11 +485,13 @@ function Body({
             <SectionHead icon={Lock} title="Access & Notification" sub="Who can view this document" />
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Visibility">
+              <Field label="Visibility" htmlFor={id('visibility')} error={errors.visibility}>
                 <IconSelect
+                  id={id('visibility')}
                   icon={Eye}
                   value={visibility}
-                  onChange={(e) => setVisibility(e.target.value)}
+                  onChange={(e) => { setVisibility(e.target.value); clearErr('visibility') }}
+                  error={!!errors.visibility}
                   options={VISIBILITY}
                 />
               </Field>
@@ -443,7 +509,7 @@ function Body({
                   </p>
                 </div>
               </div>
-              <Toggle checked={notify} onChange={setNotify} />
+              <Toggle checked={notify} onChange={setNotify} label="Notify residents" />
             </div>
           </div>
           <div className="h-3" />

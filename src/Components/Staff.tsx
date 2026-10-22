@@ -1,72 +1,72 @@
-'use client'
+"use client";
 
-import Image from 'next/image'
-import { motion, type Variants } from 'framer-motion'
-import { FiCheck } from 'react-icons/fi'
+import Image from "next/image";
+import { motion, type Variants } from "framer-motion";
+import { FiCheck } from "react-icons/fi";
 
 const features = [
-  'Staff Profiles',
-  'Attendance',
-  'Tasks',
-  'Vendor Records',
-  'Contracts',
-  'Documents',
-  'Service History',
-  'Renewal Reminders',
-]
+  "Staff Profiles",
+  "Attendance",
+  "Tasks",
+  "Vendor Records",
+  "Contracts",
+  "Documents",
+  "Service History",
+  "Renewal Reminders",
+];
 
 const people = [
   {
-    type: 'Security',
-    role: 'Security Guard',
-    name: 'Raj Kumar',
-    status: 'Morning Shift - On Duty',
-    image: '/img41.jpg',
+    type: "Security",
+    role: "Security Guard",
+    name: "Raj Kumar",
+    status: "Morning Shift - On Duty",
+    image: "/img41.jpg",
   },
   {
-    type: 'Staff',
-    role: 'Maintenance',
-    name: 'Suresh Patel',
-    status: 'Morning Shift - On Duty',
-    image: '/img5 (2).png',
+    type: "Staff",
+    role: "Maintenance",
+    name: "Suresh Patel",
+    status: "Morning Shift - On Duty",
+    image: "/img5 (2).png",
   },
   {
-    type: 'Vendor',
-    role: 'AMC Vendor',
-    name: 'Abhishek Kumar',
-    status: 'Contract active',
-    image: '/img42.jpg',
+    type: "Vendor",
+    role: "AMC Vendor",
+    name: "Abhishek Kumar",
+    status: "Contract active",
+    image: "/img42.jpg",
   },
-]
+];
 
 // Left column: label, heading and paragraph appear one after another
 const leftColumn: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.15 } },
-}
+};
 
 // Text blocks fade in while moving up
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 30 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut' } },
-}
+  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } },
+};
 
 // Feature list: each item slides in from the right, one by one
 const list: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.08, delayChildren: 0.2 } },
-}
+};
 
 const listItem: Variants = {
   hidden: { opacity: 0, x: 24 },
-  show: { opacity: 1, x: 0, transition: { duration: 0.5, ease: 'easeOut' } },
-}
+  show: { opacity: 1, x: 0, transition: { duration: 0.5, ease: "easeOut" } },
+};
 
 // Cards grid: cards rise up one by one
 const cardsGrid: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.15, delayChildren: 0.1 } },
-}
+};
 
 const cardVariant: Variants = {
   hidden: { opacity: 0, y: 50, scale: 0.95 },
@@ -74,13 +74,16 @@ const cardVariant: Variants = {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { duration: 0.7, ease: 'easeOut' },
+    transition: { duration: 0.7, ease: "easeOut" },
   },
-}
+};
 
 const Staff = () => {
   return (
-    <section className="w-full overflow-hidden bg-[#FDFDFB] py-12 sm:py-16 lg:py-20">
+    <section
+      id="management"
+      className="w-full overflow-hidden bg-[#FDFDFB] py-12 sm:py-16 lg:py-20"
+    >
       <div className="mx-auto max-w-[1440px] px-5 sm:px-10 lg:px-24">
         {/* Top row: replays every time it enters the screen (scroll up or down) */}
         <motion.div
@@ -188,7 +191,7 @@ const Staff = () => {
         </motion.div>
       </div>
     </section>
-  )
-}
+  );
+};
 
-export default Staff
+export default Staff;

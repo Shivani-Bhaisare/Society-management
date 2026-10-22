@@ -292,13 +292,13 @@ export default function GateManagementPage() {
         </motion.button>
       </motion.div>
 
-      {/* Stat cards (same card size as Dashboard cards) */}
+      {/* Stat cards (same card size as President dashboard cards) */}
       <motion.div
         variants={container}
         initial="hidden"
         whileInView="show"
         viewport={VIEWPORT}
-        className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-3"
+        className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-4"
       >
         {stats.map(({ label, value, sub, subC, icon: Icon, c }) => (
           <motion.div
@@ -313,7 +313,7 @@ export default function GateManagementPage() {
               <span className="truncate text-xs font-semibold">{label}</span>
             </div>
             <p className="mt-3 text-2xl font-bold">{value}</p>
-            <p className={`mt-1 truncate text-[10px] ${subC}`}>{sub}</p>
+            <p className={`mt-1 text-[10px] ${subC}`}>{sub}</p>
             <span className="absolute inset-x-0 bottom-0 h-0.75" style={{ background: c }} />
           </motion.div>
         ))}

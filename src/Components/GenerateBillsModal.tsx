@@ -14,6 +14,7 @@ import {
   IndianRupee, Building2, Calculator, Receipt, Bell, ClipboardList,
   MessageCircle, Mail, Smartphone, StickyNote,
 } from 'lucide-react'
+import { generateBillsSchema } from '@/lib/validations/generateBills.schema' // NEW
 
 /* ---------- Config ---------- */
 
@@ -237,15 +238,24 @@ function Body({
   const amountNum = Number(amount) || 0
   const total = calcType === 'Fixed per flat' ? amountNum * flats : null
 
+  // NEW: validation now runs through the zod schema
   function validate(asDraft: boolean) {
+    const result = generateBillsSchema.safeParse({
+      isDraft: asDraft,
+      amount,
+      dueDate,
+    })
+
     const err: Record<string, string> = {}
-    if (!asDraft) {
-      if (!amount || amountNum <= 0) err.amount = 'Enter a valid amount'
-      if (!dueDate) err.dueDate = 'Due date is required'
-      else if (dueDate < toISO(new Date())) err.dueDate = 'Due date cannot be in the past'
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        const key = String(issue.path[0])
+        if (!err[key]) err[key] = issue.message
+      }
     }
+
     setErrors(err)
-    return Object.keys(err).length === 0
+    return result.success
   }
 
   function save(finalStatus: 'Draft' | 'Generated') {

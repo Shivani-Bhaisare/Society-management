@@ -1,27 +1,27 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import Image from 'next/image'
-import { motion, type Variants } from 'framer-motion'
-import { ArrowRight, ArrowDown } from 'lucide-react'
-import Button from '../Components/Button'
+import { useState } from "react";
+import Image from "next/image";
+import { motion, type Variants } from "framer-motion";
+import { ArrowRight, ArrowDown } from "lucide-react";
+import Button from "../Components/Button";
 
-const HUB = { x: 350, y: 350, r: 78 }
+const HUB = { x: 350, y: 350, r: 78 };
 
 const RINGS = [
-  { r: 175, opacity: 0.22, cls: 'hero-ring-a' },
-  { r: 265, opacity: 0.16, cls: 'hero-ring-b' },
-  { r: 340, opacity: 0.1, cls: 'hero-ring-a' },
-]
+  { r: 175, opacity: 0.22, cls: "hero-ring-a" },
+  { r: 265, opacity: 0.16, cls: "hero-ring-b" },
+  { r: 340, opacity: 0.1, cls: "hero-ring-a" },
+];
 
 const nodes = [
-  { label: 'Residents', x: 345, y: 183, w: 94 },
-  { label: 'Community', x: 191, y: 266, w: 100 },
-  { label: 'Security', x: 518, y: 266, w: 88 },
-  { label: 'Facilities', x: 202, y: 446, w: 93 },
-  { label: 'Finance', x: 504, y: 446, w: 81 },
-  { label: 'Operations', x: 349, y: 529, w: 102 },
-]
+  { label: "Residents", x: 345, y: 183, w: 94 },
+  { label: "Community", x: 191, y: 266, w: 100 },
+  { label: "Security", x: 518, y: 266, w: 88 },
+  { label: "Facilities", x: 202, y: 446, w: 93 },
+  { label: "Finance", x: 504, y: 446, w: 81 },
+  { label: "Operations", x: 349, y: 529, w: 102 },
+];
 
 const glowDots = [
   { x: 357, y: 108 },
@@ -31,14 +31,14 @@ const glowDots = [
   { x: 350, y: 85 },
   { x: 615, y: 350 },
   { x: 118, y: 470 },
-]
+];
 
-const NODE_H = 27
+const NODE_H = 27;
 
 // First page load: wait for the navbar animation to finish (in seconds)
-const FIRST_LOAD_DELAY = 1.8
+const FIRST_LOAD_DELAY = 1.8;
 // Later replays (scrolling back to the hero): almost no wait
-const REPLAY_DELAY = 0.2
+const REPLAY_DELAY = 0.2;
 
 // Parent: children appear one after another. The delay is passed in via "custom"
 const container: Variants = {
@@ -46,19 +46,22 @@ const container: Variants = {
   show: (delay: number) => ({
     transition: { staggerChildren: 0.15, delayChildren: delay },
   }),
-}
+};
 
 const item: Variants = {
   hidden: { opacity: 0, y: 30 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut' } },
-}
+  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } },
+};
 
 const Hero = () => {
   // Starts with the navbar delay, switches to a short delay after the hero leaves the screen once
-  const [delay, setDelay] = useState(FIRST_LOAD_DELAY)
+  const [delay, setDelay] = useState(FIRST_LOAD_DELAY);
 
   return (
-    <section className="relative h-screen w-full overflow-hidden bg-[#000207]">
+    <section
+      id="home"
+      className="relative h-screen w-full overflow-hidden bg-[#000207]"
+    >
       <Image
         src="/image1 (2).png"
         alt="Modern residential society"
@@ -77,7 +80,7 @@ const Hero = () => {
         whileInView={{
           opacity: 1,
           scale: 1,
-          transition: { duration: 1.2, ease: 'easeOut', delay },
+          transition: { duration: 1.2, ease: "easeOut", delay },
         }}
         viewport={{ once: false, amount: 0.3 }}
         className="pointer-events-none absolute right-0 top-1/2 hidden aspect-square w-[min(56vw,100vh)] -translate-y-1/2 lg:block"
@@ -148,13 +151,39 @@ const Hero = () => {
             strokeOpacity="0.55"
             strokeWidth="1.4"
           />
-          <text x={HUB.x} y={HUB.y - 22} textAnchor="middle" dominantBaseline="central" fill="#60A5FA" fontSize="7" fontWeight="700" letterSpacing="1.8">
+          <text
+            x={HUB.x}
+            y={HUB.y - 22}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="#60A5FA"
+            fontSize="7"
+            fontWeight="700"
+            letterSpacing="1.8"
+          >
             ONE CONNECTED
           </text>
-          <text x={HUB.x} y={HUB.y} textAnchor="middle" dominantBaseline="central" fill="#FFFFFF" fontSize="17" fontWeight="700">
+          <text
+            x={HUB.x}
+            y={HUB.y}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="#FFFFFF"
+            fontSize="17"
+            fontWeight="700"
+          >
             SOCIETYOS
           </text>
-          <text x={HUB.x} y={HUB.y + 24} textAnchor="middle" dominantBaseline="central" fill="#60A5FA" fontSize="7" fontWeight="700" letterSpacing="1.8">
+          <text
+            x={HUB.x}
+            y={HUB.y + 24}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="#60A5FA"
+            fontSize="7"
+            fontWeight="700"
+            letterSpacing="1.8"
+          >
             DATABASE
           </text>
 
@@ -177,7 +206,15 @@ const Hero = () => {
                 strokeOpacity="0.25"
               />
               <circle cx={n.x - n.w / 2 + 11} cy={n.y} r="2.6" fill="#60A5FA" />
-              <text x={n.x - n.w / 2 + 21} y={n.y} dominantBaseline="central" fill="#FFFFFF" fontSize="9" fontWeight="700" letterSpacing="1.1">
+              <text
+                x={n.x - n.w / 2 + 21}
+                y={n.y}
+                dominantBaseline="central"
+                fill="#FFFFFF"
+                fontSize="9"
+                fontWeight="700"
+                letterSpacing="1.1"
+              >
                 {n.label.toUpperCase()}
               </text>
             </g>
@@ -224,7 +261,8 @@ const Hero = () => {
           className="mt-8 max-w-[600px] text-sm uppercase leading-6 text-white/80"
         >
           Society OS brings residents, security, finance, maintenance, visitors,
-          amenities and everyday operations together in one intelligent platform.
+          amenities and everyday operations together in one intelligent
+          platform.
         </motion.p>
 
         <motion.div variants={item} className="mt-8 flex flex-wrap gap-2">
@@ -248,7 +286,7 @@ const Hero = () => {
         </motion.div>
       </motion.div>
     </section>
-  )
-}
+  );
+};
 
-export default Hero
+export default Hero;

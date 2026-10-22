@@ -14,6 +14,7 @@ import {
   Building2, Clock, Bell, Eye, Camera, Trash2, ChevronDown, Minus, Plus,
   ShieldCheck, ClipboardList, Hash, ShieldAlert, UserCheck,
 } from 'lucide-react'
+import { gateEntrySchema } from '@/lib/validations/gateEntry.schema' // NEW
 
 /* ---------- Config ---------- */
 
@@ -272,25 +273,22 @@ function Body({
     setPhotoUrl('')
   }
 
+  // NEW: validation now runs through the zod schema
   function validate() {
+    const result = gateEntrySchema.safeParse({
+      type, name, phone, flat, vehicleNo, entryTime, isBlacklisted,
+    })
+
     const err: Record<string, string> = {}
-    if (!name.trim()) err.name = `${NAME_LABEL[type]} is required`
-
-    if (isBlacklisted) err.phone = 'This person is blacklisted. Entry restricted'
-    else if (!phone && phoneReq) err.phone = 'Phone number is required'
-    else if (phone && !/^[6-9]\d{9}$/.test(phone)) err.phone = 'Enter a valid 10-digit mobile number'
-
-    if (flatReq && !flat.trim()) err.flat = 'Flat number is required'
-
-    const vn = vehicleNo.replace(/\s/g, '')
-    if (vehicleReq && !vn) err.vehicleNo = 'Vehicle number is required'
-    else if (vn && !/^[A-Z]{2}\d{2}[A-Z]{1,3}\d{4}$/.test(vn))
-      err.vehicleNo = 'Enter a valid number, e.g. MP04 AB 1234'
-
-    if (!entryTime) err.entryTime = 'Entry time is required'
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        const key = String(issue.path[0])
+        if (!err[key]) err[key] = issue.message
+      }
+    }
 
     setErrors(err)
-    return Object.keys(err).length === 0
+    return result.success
   }
 
   function save() {

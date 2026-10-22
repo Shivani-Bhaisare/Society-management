@@ -14,6 +14,7 @@ import {
   IndianRupee, MapPin, UploadCloud, Trash2, ChevronDown, Eye, FileText,
   ShieldCheck, PhoneCall, Camera, Users,
 } from 'lucide-react'
+import { staffSchema } from '@/lib/validations/staff.schema' // NEW
 
 /* ---------- Config ---------- */
 
@@ -272,19 +273,22 @@ function Body({
     }
   }
 
+  // NEW: validation now runs through the zod schema
   function validate() {
+    const result = staffSchema.safeParse({
+      name, phone, email, role, department, joiningDate, emergencyPhone,
+    })
+
     const err: Record<string, string> = {}
-    if (!name.trim()) err.name = 'Staff name is required'
-    if (!phone) err.phone = 'Contact number is required'
-    else if (!/^[6-9]\d{9}$/.test(phone)) err.phone = 'Enter a valid 10-digit mobile number'
-    if (email && !/^\S+@\S+\.\S+$/.test(email)) err.email = 'Enter a valid email address'
-    if (!role) err.role = 'Role is required'
-    if (!department) err.department = 'Department is required'
-    if (!joiningDate) err.joiningDate = 'Joining date is required'
-    if (emergencyPhone && !/^[6-9]\d{9}$/.test(emergencyPhone))
-      err.emergencyPhone = 'Enter a valid 10-digit mobile number'
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        const key = String(issue.path[0])
+        if (!err[key]) err[key] = issue.message
+      }
+    }
+
     setErrors(err)
-    return Object.keys(err).length === 0
+    return result.success
   }
 
   function save() {

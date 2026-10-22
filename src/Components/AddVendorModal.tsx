@@ -14,6 +14,7 @@ import {
   FileText, UploadCloud, Trash2, ChevronDown, Eye, Star, MapPin, ShieldCheck,
   RefreshCw, Wallet, ClipboardList,
 } from 'lucide-react'
+import { vendorSchema } from '@/lib/validations/vendor.schema' // NEW
 
 /* ---------- Config ---------- */
 
@@ -241,21 +242,22 @@ function Body({
     }
   }
 
+  // NEW: validation now runs through the zod schema
   function validate() {
+    const result = vendorSchema.safeParse({
+      name, service, phone, email, gst, pan, contractStart, contractEnd,
+    })
+
     const err: Record<string, string> = {}
-    if (!name.trim()) err.name = 'Vendor name is required'
-    if (!service) err.service = 'Service type is required'
-    if (!phone) err.phone = 'Contact number is required'
-    else if (!/^[6-9]\d{9}$/.test(phone)) err.phone = 'Enter a valid 10-digit mobile number'
-    if (email && !/^\S+@\S+\.\S+$/.test(email)) err.email = 'Enter a valid email address'
-    if (gst && !/^\d{2}[A-Z]{5}\d{4}[A-Z]\d[A-Z\d][A-Z\d]$/.test(gst)) err.gst = 'Enter a valid 15-character GSTIN'
-    if (pan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(pan)) err.pan = 'Enter a valid 10-character PAN'
-    if (!contractStart) err.contractStart = 'Start date is required'
-    if (!contractEnd) err.contractEnd = 'End date is required'
-    if (contractStart && contractEnd && contractEnd < contractStart)
-      err.contractEnd = 'End date must be after start date'
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        const key = String(issue.path[0])
+        if (!err[key]) err[key] = issue.message
+      }
+    }
+
     setErrors(err)
-    return Object.keys(err).length === 0
+    return result.success
   }
 
   function save() {

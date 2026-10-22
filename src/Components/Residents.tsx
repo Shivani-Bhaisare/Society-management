@@ -1,48 +1,48 @@
-'use client'
+"use client";
 
-import Image from 'next/image'
-import { motion, type Variants } from 'framer-motion'
+import Image from "next/image";
+import { motion, type Variants } from "framer-motion";
 
 const phones = [
   {
-    src: '/img44.jpeg',
-    alt: 'SocietyOS welcome screen',
-    className: '-rotate-[6deg] lg:-rotate-[8deg] lg:translate-y-6 z-10',
+    src: "/img44.jpeg",
+    alt: "SocietyOS welcome screen",
+    className: "-rotate-[6deg] lg:-rotate-[8deg] lg:translate-y-6 z-10",
   },
   {
-    src: '/img45.jpeg',
-    alt: 'SocietyOS login screen',
-    className: '-rotate-[2deg] lg:-rotate-[3deg] lg:-translate-y-2 z-20',
+    src: "/img45.jpeg",
+    alt: "SocietyOS login screen",
+    className: "-rotate-[2deg] lg:-rotate-[3deg] lg:-translate-y-2 z-20",
   },
   {
-    src: '/img46.jpeg',
-    alt: 'SocietyOS community features screen',
-    className: 'rotate-[2deg] lg:rotate-[3deg] lg:-translate-y-2 z-20',
+    src: "/img46.jpeg",
+    alt: "SocietyOS community features screen",
+    className: "rotate-[2deg] lg:rotate-[3deg] lg:-translate-y-2 z-20",
   },
   {
-    src: '/img48.jpeg',
-    alt: 'SocietyOS security guard screen',
-    className: 'rotate-[6deg] lg:rotate-[8deg] lg:translate-y-6 z-10',
+    src: "/img48.jpeg",
+    alt: "SocietyOS security guard screen",
+    className: "rotate-[6deg] lg:rotate-[8deg] lg:translate-y-6 z-10",
   },
-]
+];
 
 // Header block: label, heading and paragraph appear one after another
 const header: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.15 } },
-}
+};
 
 // Text fades in while moving up
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 30 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut' } },
-}
+  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } },
+};
 
 // Phones row: phones rise up one by one
 const phonesRow: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.15, delayChildren: 0.3 } },
-}
+};
 
 // The animation is on a wrapper so it does not clash with the tilt (rotate/translate)
 // classes applied to the inner phone element
@@ -52,13 +52,16 @@ const phoneItem: Variants = {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { duration: 0.8, ease: 'easeOut' },
+    transition: { duration: 0.8, ease: "easeOut" },
   },
-}
+};
 
 const Residents = () => {
   return (
-    <section className="w-full overflow-hidden bg-[#081121] py-12 sm:py-16 lg:py-20">
+    <section
+      id="residents"
+      className="w-full overflow-hidden bg-[#081121] py-12 sm:py-16 lg:py-20"
+    >
       {/* Animation replays every time this block enters the screen (scroll up or down) */}
       <motion.div
         variants={header}
@@ -117,7 +120,7 @@ const Residents = () => {
         </motion.div>
       </motion.div>
     </section>
-  )
-}
+  );
+};
 
-export default Residents
+export default Residents;

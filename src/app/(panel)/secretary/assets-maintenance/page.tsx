@@ -384,13 +384,13 @@ export default function AssetsMaintenancePage() {
         </motion.button>
       </motion.div>
 
-      {/* Stat cards (same grid as Society page: same card width & height) */}
+      {/* Stat cards (same card size as President dashboard) */}
       <motion.div
         variants={container}
         initial="hidden"
         whileInView="show"
         viewport={VIEWPORT}
-        className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-3"
+        className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-4"
       >
         {stats.map(({ label, value, sub, subC, icon: Icon, c }) => (
           <motion.div
