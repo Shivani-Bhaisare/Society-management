@@ -223,80 +223,73 @@ export const roleMenus: Record<Role, NavLink[]> = {
   ],
 
   // =========================
-  // TREASURER (same order, names and icons as the design)
+  // TREASURER (names as per the design screens 30 to 42)
   // =========================
-  treasurer: [
+ treasurer: [
     {
       href: "/treasurer/dashboard",
       label: "Dashboard",
-      desc: "Overall financial summary",
       icon: LayoutDashboard,
     },
     {
-      href: "/treasurer/maintenance-collection",
-      label: "Maintenance Collection",
-      desc: "Monthly bills, collections and dues",
-      icon: Receipt,
+      href: "/treasurer/maintenance-bills",
+      label: "Maintenance-bills",
+      icon: Wrench,
     },
     {
-      href: "/treasurer/income",
-      label: "Income",
-      desc: "All society income sources",
-      icon: Wallet,
-    },
-    {
-      href: "/treasurer/expenses",
-      label: "Expenses",
-      desc: "Expenses, bills and payments made",
-      icon: CreditCard,
-    },
-    {
-      href: "/treasurer/invoices-bills",
-      label: "Invoices & Bills",
-      desc: "Generate and manage invoices",
-      icon: FileText,
-    },
-    {
-      href: "/treasurer/payments",
-      label: "Payments & Bank Transactions",
-      desc: "Payment history and bank reconciliation",
-      icon: Landmark,
-    },
-    {
-      href: "/treasurer/accounting-ledger",
-      label: "Accounting & Ledger",
-      desc: "Ledger, journal, cash book and bank book",
-      icon: BookOpen,
-    },
-    {
-      href: "/treasurer/budget",
-      label: "Budget Management",
-      desc: "Planned vs actual budget",
-      icon: BarChart3,
-    },
-    {
-      href: "/treasurer/funds",
-      label: "Funds & Reserves",
-      desc: "Sinking fund, repair fund and reserve fund",
-      icon: PiggyBank,
-    },
-    {
-      href: "/treasurer/expense-approval",
-      label: "Expense Approvals",
-      desc: "Approve or reject expenses",
-      icon: ClipboardCheck,
-    },
-    {
-      href: "/treasurer/defaulters",
-      label: "Defaulters & Outstanding",
-      desc: "Overdue flats and pending dues",
-      icon: Users,
-    },
-    {
-      href: "/treasurer/financial-reports",
-      label: "Financial Reports & Audit",
-      desc: "Financial statements and audit reports",
-      icon: PieChart,
-    },
-  ],
+  href: "/treasurer/multiple-charge-heads",
+  label: "Multiple Charge Heads",
+  icon: ReceiptText,
+},
+{
+  href: "/treasurer/general-ledger",
+  label: "General Ledger",
+  icon: BookOpen,
+},
+{
+  href: "/treasurer/accounts-receivable",
+  label: "Accounts Receivable",
+  icon: Wallet,
+},
+{
+  href: "/treasurer/accounts-payable",
+  label: "Accounts Payable",
+  icon: CreditCard,
+},
+{
+  href: "/treasurer/vendor-bills",
+  label: "Vendor Bill Management",
+  icon: Store,
+},
+{
+  href: "/treasurer/late-fee-rules",
+  label: "Late Fee Rules",
+  icon: Gavel,
+},
+{
+  href: "/treasurer/bank-reconciliation",
+  label: "Bank Reconciliation",
+  icon: Landmark,
+},
+{
+  href: "/treasurer/income-expense",
+  label: "Income / Expense",
+  icon: BarChart3,
+},
+{
+  href: "/treasurer/audit-reports",
+  label: "Audit Reports",
+  icon: FileText,
+},
+{
+  href: "/treasurer/gst-tax",
+  label: "GST / Tax Support",
+  icon: Calculator,
+},
+{
+  href: "/treasurer/sinking-fund",
+  label: "Sinking / Reserve Funds",
+  icon: PiggyBank,
+},
+  ]
 };

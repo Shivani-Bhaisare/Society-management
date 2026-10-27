@@ -297,7 +297,7 @@ function Body({
         exit={{ x: '100%' }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-150 flex-col overflow-hidden rounded-l-2xl border border-r-0 border-[#272D39] bg-[#10131A] text-white shadow-2xl"
+        className="flex h-full w-full max-w-md flex-col overflow-hidden rounded-l-2xl border border-r-0 border-[#272D39] bg-[#10131A] text-white shadow-2xl"
       >
         {/* Header */}
         <div className="flex shrink-0 items-start justify-between gap-3 p-3.5 pb-2 sm:p-4 sm:pb-2">
@@ -326,7 +326,7 @@ function Body({
             {/* Section 1: Bill Details */}
             <SectionHead first icon={ClipboardList} title="Bill Details" sub="Month, wing, bill type and calculation" />
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field label="Billing Month">
                 <IconSelect
                   icon={CalendarDays}
@@ -346,7 +346,7 @@ function Body({
               </Field>
             </div>
 
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field label="Bill Type">
                 <IconSelect
                   icon={FileText}
@@ -369,7 +369,7 @@ function Body({
             {/* Section 2: Amount & Schedule */}
             <SectionHead icon={IndianRupee} title="Amount & Schedule" sub="Bill amount, due date and late fee" />
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field label="Amount" error={errors.amount}>
                 <IconInput
                   icon={IndianRupee}
@@ -392,7 +392,7 @@ function Body({
               </Field>
             </div>
 
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field label="Late Fee" hint="Optional, per month">
                 <IconInput
                   icon={IndianRupee}
