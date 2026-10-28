@@ -80,7 +80,7 @@ const panelItem: Variants = {
 
 const Documents = () => {
   return (
-    <section className="w-full overflow-hidden bg-[#F9F6F2] py-12 sm:py-16 lg:py-20">
+    <section className="w-full overflow-hidden  bg-[#F8FAFD] py-12 sm:py-16 lg:py-20">
       {/* Animation replays every time this block enters the screen (scroll up or down) */}
       <motion.div
         initial="hidden"

@@ -61,7 +61,7 @@ const card: Variants = {
 
 const HowItWorks = () => {
   return (
-    <section className="w-full overflow-hidden bg-[#F9F6F2] py-12 sm:py-14 lg:py-16">
+    <section className="w-full overflow-hidden  bg-[#F8FAFD] py-12 sm:py-14 lg:py-16">
       <div className="mx-auto max-w-[1440px] px-5 sm:px-10 lg:px-24">
         {/* Heading: replays every time it enters the screen (scroll up or down) */}
         <motion.div

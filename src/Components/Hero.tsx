@@ -39,6 +39,9 @@ const NODE_H = 27;
 const FIRST_LOAD_DELAY = 1.8;
 // Later replays (scrolling back to the hero): almost no wait
 const REPLAY_DELAY = 0.2;
+// Right side diagram starts when the left content is almost finished
+// (left total = 4 x 0.15 stagger + 0.7 duration = ~1.3s). Lower = faster start.
+const RIGHT_EXTRA_DELAY = 0.9;
 
 // Parent: children appear one after another. The delay is passed in via "custom"
 const container: Variants = {
@@ -53,9 +56,60 @@ const item: Variants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } },
 };
 
+/* ---------- Right side diagram: step by step build (fast) ---------- */
+
+// Wrapper only passes "hidden" / "show" down to the SVG parts.
+// Every part has its own delay (on top of the base delay), so the diagram builds step by step.
+const diagram: Variants = {
+  hidden: {},
+  show: {},
+};
+
+// Each ring grows outward from the hub center and fades in
+const ringVariant = (delay: number): Variants => ({
+  hidden: { opacity: 0, scale: 0.6 },
+  show: {
+    opacity: 1,
+    scale: 1,
+    transition: { duration: 0.6, ease: "easeOut", delay },
+  },
+});
+
+// Hub (glow + circle): scales up from its own center
+const hubVariant = (delay: number): Variants => ({
+  hidden: { opacity: 0, scale: 0.4 },
+  show: {
+    opacity: 1,
+    scale: 1,
+    transition: { duration: 0.5, ease: "easeOut", delay },
+  },
+});
+
+// Simple fade in after the given delay (hub text, glow dots)
+const fade = (delay: number): Variants => ({
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { duration: 0.5, ease: "easeOut", delay } },
+});
+
+// Nodes: pop in one by one (index is passed through "custom")
+const nodeVariant = (delay: number): Variants => ({
+  hidden: { opacity: 0, scale: 0.5 },
+  show: (i: number) => ({
+    opacity: 1,
+    scale: 1,
+    transition: { duration: 0.35, ease: "easeOut", delay: delay + i * 0.08 },
+  }),
+});
+
+// Makes SVG elements scale from their own center instead of the SVG corner
+const fromCenter = { transformBox: "fill-box", transformOrigin: "center" } as const;
+
 const Hero = () => {
   // Starts with the navbar delay, switches to a short delay after the hero leaves the screen once
   const [delay, setDelay] = useState(FIRST_LOAD_DELAY);
+
+  // Right diagram starts after navbar + left content
+  const base = delay + RIGHT_EXTRA_DELAY;
 
   return (
     <section
@@ -73,15 +127,12 @@ const Hero = () => {
 
       <div className="absolute inset-0 bg-gradient-to-r from-[#000207] via-[#000207]/70 to-transparent" />
 
-      {/* RIGHT SIDE diagram: replays every time the hero enters the screen */}
+      {/* RIGHT SIDE diagram: builds step by step AFTER the left content, replays every time the hero enters the screen */}
       <motion.div
         aria-hidden="true"
-        initial={{ opacity: 0, scale: 0.9 }}
-        whileInView={{
-          opacity: 1,
-          scale: 1,
-          transition: { duration: 1.2, ease: "easeOut", delay },
-        }}
+        variants={diagram}
+        initial="hidden"
+        whileInView="show"
         viewport={{ once: false, amount: 0.3 }}
         className="pointer-events-none absolute right-0 top-1/2 hidden aspect-square w-[min(56vw,100vh)] -translate-y-1/2 lg:block"
       >
@@ -101,128 +152,147 @@ const Hero = () => {
             </linearGradient>
           </defs>
 
-          {/* Rings: dashed + slowly rotating */}
-          {RINGS.map((ring) => (
-            <circle
+          {/* Step 1: rings grow outward one by one (dashed + slowly rotating) */}
+          {RINGS.map((ring, i) => (
+            <motion.g
               key={ring.r}
-              className={ring.cls}
-              cx={HUB.x}
-              cy={HUB.y}
-              r={ring.r}
-              stroke="#3B82F6"
-              strokeOpacity={ring.opacity}
-              strokeWidth="1"
-              strokeDasharray="3 9"
-            />
+              variants={ringVariant(base + i * 0.15)}
+              style={fromCenter}
+            >
+              <circle
+                className={ring.cls}
+                cx={HUB.x}
+                cy={HUB.y}
+                r={ring.r}
+                stroke="#3B82F6"
+                strokeOpacity={ring.opacity}
+                strokeWidth="1"
+                strokeDasharray="3 9"
+              />
+            </motion.g>
           ))}
 
-          {/* Glow dots: the whole group orbits around the hub */}
-          <g className="hero-orbit">
-            {glowDots.map((d, i) => (
-              <g key={`${d.x}-${d.y}`}>
-                <circle cx={d.x} cy={d.y} r="10" fill="url(#hero-dot-glow)" />
-                <circle
-                  className="hero-pulse"
-                  style={{ animationDelay: `${i * 0.35}s` }}
-                  cx={d.x}
-                  cy={d.y}
-                  r="2.5"
-                  fill="#93C5FD"
-                />
-              </g>
-            ))}
-          </g>
+          {/* Step 2: center hub scales up from its center */}
+          <motion.g variants={hubVariant(base + 0.4)} style={fromCenter}>
+            <circle
+              className="hero-pulse"
+              cx={HUB.x}
+              cy={HUB.y}
+              r={HUB.r + 30}
+              fill="url(#hero-hub-glow)"
+            />
+            <circle
+              cx={HUB.x}
+              cy={HUB.y}
+              r={HUB.r}
+              fill="url(#hero-hub-fill)"
+              fillOpacity="0.95"
+              stroke="#60A5FA"
+              strokeOpacity="0.55"
+              strokeWidth="1.4"
+            />
+          </motion.g>
 
-          {/* Center hub */}
-          <circle
-            className="hero-pulse"
-            cx={HUB.x}
-            cy={HUB.y}
-            r={HUB.r + 30}
-            fill="url(#hero-hub-glow)"
-          />
-          <circle
-            cx={HUB.x}
-            cy={HUB.y}
-            r={HUB.r}
-            fill="url(#hero-hub-fill)"
-            fillOpacity="0.95"
-            stroke="#60A5FA"
-            strokeOpacity="0.55"
-            strokeWidth="1.4"
-          />
-          <text
-            x={HUB.x}
-            y={HUB.y - 22}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill="#60A5FA"
-            fontSize="7"
-            fontWeight="700"
-            letterSpacing="1.8"
-          >
-            ONE CONNECTED
-          </text>
-          <text
-            x={HUB.x}
-            y={HUB.y}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill="#FFFFFF"
-            fontSize="17"
-            fontWeight="700"
-          >
-            SOCIETYOS
-          </text>
-          <text
-            x={HUB.x}
-            y={HUB.y + 24}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill="#60A5FA"
-            fontSize="7"
-            fontWeight="700"
-            letterSpacing="1.8"
-          >
-            DATABASE
-          </text>
-
-          {/* Node pills: gentle up-down float */}
-          {nodes.map((n, i) => (
-            <g
-              key={n.label}
-              className="hero-float"
-              style={{ animationDelay: `${i * 0.5}s` }}
+          {/* Step 3: hub text fades in */}
+          <motion.g variants={fade(base + 0.7)}>
+            <text
+              x={HUB.x}
+              y={HUB.y - 22}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="#60A5FA"
+              fontSize="7"
+              fontWeight="700"
+              letterSpacing="1.8"
             >
-              <rect
-                x={n.x - n.w / 2}
-                y={n.y - NODE_H / 2}
-                width={n.w}
-                height={NODE_H}
-                rx="3"
-                fill="#0A1120"
-                fillOpacity="0.92"
-                stroke="#60A5FA"
-                strokeOpacity="0.25"
-              />
-              <circle cx={n.x - n.w / 2 + 11} cy={n.y} r="2.6" fill="#60A5FA" />
-              <text
-                x={n.x - n.w / 2 + 21}
-                y={n.y}
-                dominantBaseline="central"
-                fill="#FFFFFF"
-                fontSize="9"
-                fontWeight="700"
-                letterSpacing="1.1"
-              >
-                {n.label.toUpperCase()}
-              </text>
+              ONE CONNECTED
+            </text>
+            <text
+              x={HUB.x}
+              y={HUB.y}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="#FFFFFF"
+              fontSize="17"
+              fontWeight="700"
+            >
+              SOCIETYOS
+            </text>
+            <text
+              x={HUB.x}
+              y={HUB.y + 24}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="#60A5FA"
+              fontSize="7"
+              fontWeight="700"
+              letterSpacing="1.8"
+            >
+              DATABASE
+            </text>
+          </motion.g>
+
+          {/* Step 4: glow dots fade in (the whole group orbits around the hub) */}
+          <motion.g variants={fade(base + 0.9)}>
+            <g className="hero-orbit">
+              {glowDots.map((d, i) => (
+                <g key={`${d.x}-${d.y}`}>
+                  <circle cx={d.x} cy={d.y} r="10" fill="url(#hero-dot-glow)" />
+                  <circle
+                    className="hero-pulse"
+                    style={{ animationDelay: `${i * 0.35}s` }}
+                    cx={d.x}
+                    cy={d.y}
+                    r="2.5"
+                    fill="#93C5FD"
+                  />
+                </g>
+              ))}
             </g>
+          </motion.g>
+
+          {/* Step 5: node pills pop in one by one (then gentle up-down float) */}
+          {nodes.map((n, i) => (
+            <motion.g
+              key={n.label}
+              custom={i}
+              variants={nodeVariant(base + 1)}
+              style={fromCenter}
+            >
+              <g
+                className="hero-float"
+                style={{ animationDelay: `${i * 0.5}s` }}
+              >
+                <rect
+                  x={n.x - n.w / 2}
+                  y={n.y - NODE_H / 2}
+                  width={n.w}
+                  height={NODE_H}
+                  rx="3"
+                  fill="#0A1120"
+                  fillOpacity="0.92"
+                  stroke="#60A5FA"
+                  strokeOpacity="0.25"
+                />
+                <circle cx={n.x - n.w / 2 + 11} cy={n.y} r="2.6" fill="#60A5FA" />
+                <text
+                  x={n.x - n.w / 2 + 21}
+                  y={n.y}
+                  dominantBaseline="central"
+                  fill="#FFFFFF"
+                  fontSize="9"
+                  fontWeight="700"
+                  letterSpacing="1.1"
+                >
+                  {n.label.toUpperCase()}
+                </text>
+              </g>
+            </motion.g>
           ))}
         </svg>
       </motion.div>
 
-      {/* Content: stagger fade-up, replays every time the hero enters the screen */}
+      {/* LEFT SIDE content: starts first, stagger fade-up, replays every time the hero enters the screen */}
       <motion.div
         variants={container}
         custom={delay}

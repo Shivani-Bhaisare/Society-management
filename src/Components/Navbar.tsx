@@ -65,15 +65,14 @@ const Navbar = () => {
       >
         {/* Logo: image logo (40x40) + brand name */}
         <motion.div variants={itemVariants}>
-          <Link href="/#home" className="group flex items-center gap-2">
-            {/* Logo rotates and scales slightly when hovered */}
+          <Link href="/#home" className="flex items-center gap-2">
             <Image
               src={LOGO_SRC}
               alt="Society OS logo"
               width={40}
               height={40}
               priority
-              className="h-10 w-10 shrink-0 object-contain transition-transform duration-500 group-hover:rotate-[360deg] group-hover:scale-110"
+              className="h-10 w-10 shrink-0 object-contain"
             />
             <span className="text-xl font-semibold text-white">Society OS</span>
           </Link>
