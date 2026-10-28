@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { motion, type Variants } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   Landmark,
   Wallet,
@@ -11,10 +11,15 @@ import {
   Search,
   ArrowUp,
   ArrowDown,
-  MoreVertical,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  Eye,
+  Pencil,
+  Power,
+  Trash2,
+  CheckCircle2,
+  X,
 } from "lucide-react";
 import { Card, Badge } from "@/Components/ui";
 import AddReserveFundModal, { type AddReserveFundPayload } from "@/Components/AddReserveFundModal"; // adjust the path to your folder
@@ -49,10 +54,9 @@ const ORANGE = "#F59E0B";
 
 /* ---------- Data (replace with API data later) ---------- */
 
-// Top summary cards.
+// Other summary cards (the "Total Funds" card is calculated inside the page).
 // up = arrow direction, good = green (true) or red (false)
-const stats = [
-  { label: "Total Funds", value: "3", sub: "2 Active | 1 Inactive", pct: "", up: true, good: true, icon: Landmark, c: BLUE },
+const otherStats = [
   { label: "Total Balance", value: "₹ 48,75,000", sub: "vs last year", pct: "12%", up: true, good: true, icon: Wallet, c: GREEN },
   { label: "Total Contributions", value: "₹ 16,50,000", sub: "vs last year", pct: "8%", up: true, good: true, icon: PiggyBank, c: PURPLE },
   { label: "Total Utilization", value: "₹ 7,25,000", sub: "vs last year", pct: "5%", up: false, good: true, icon: TrendingDown, c: RED },
@@ -92,6 +96,8 @@ const activity = [
   { title: "Fund created", sub: "Club House Fund", date: "01 Nov 2025", c: BLUE },
 ];
 
+type FundStatus = "Active" | "Inactive";
+
 type Fund = {
   id: number;
   name: string;
@@ -101,18 +107,25 @@ type Fund = {
   utilization: string;
   closing: string;
   target: string;
-  status: "Active" | "Inactive";
+  status: FundStatus;
 };
 
-const funds: Fund[] = [
+const initialFunds: Fund[] = [
   { id: 1, name: "Sinking Fund", purpose: "Major repairs & future capital expenses", opening: "₹ 15,00,000", contributions: "₹ 7,50,000", utilization: "₹ 1,00,000", closing: "₹ 21,50,000", target: "₹ 50,00,000", status: "Active" },
   { id: 2, name: "Lift Replacement Fund", purpose: "Lift maintenance & replacement", opening: "₹ 8,00,000", contributions: "₹ 4,20,000", utilization: "₹ 2,00,000", closing: "₹ 10,20,000", target: "₹ 25,00,000", status: "Active" },
   { id: 3, name: "Painting Fund", purpose: "Building painting & repairs", opening: "₹ 5,50,000", contributions: "₹ 2,80,000", utilization: "₹ 1,25,000", closing: "₹ 6,05,000", target: "₹ 15,00,000", status: "Active" },
   { id: 4, name: "Club House Fund", purpose: "Club house maintenance", opening: "₹ 2,00,000", contributions: "₹ 1,50,000", utilization: "₹ 0", closing: "₹ 3,50,000", target: "₹ 10,00,000", status: "Inactive" },
 ];
 
-const fundOptions = ["All Funds", ...funds.map((f) => f.name)];
 const statusOptions = ["Status", "Active", "Inactive"];
+
+/* ---------- Money helpers ---------- */
+
+// "₹ 50,00,000" -> 5000000
+const toNumber = (v: string) => Number(v.replace(/[^\d.]/g, "")) || 0;
+
+// 5000000 -> "₹ 50,00,000" (Indian number format)
+const toMoney = (n: number) => `₹ ${n.toLocaleString("en-IN")}`;
 
 /* ---------- Shared styles (same as Residents) ---------- */
 
@@ -121,6 +134,9 @@ const th =
 const td = "border-t border-[#272D39] px-2 py-2.5";
 const field =
   "w-full rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60";
+
+// Small icon button used in the Actions column
+const iconBtn = "cursor-pointer rounded-md p-1.5 transition active:scale-90";
 
 /* ---------- Small helpers ---------- */
 
@@ -189,13 +205,385 @@ function Donut({
   );
 }
 
+/* ---------- View Details popup ---------- */
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-[#272D39] py-2 text-[11px] first:border-t-0">
+      <span className="shrink-0 text-slate-400">{label}</span>
+      <span className="min-w-0 break-words text-right font-medium text-slate-200">{value}</span>
+    </div>
+  );
+}
+
+type ViewFundModalProps = {
+  record: Fund;
+  onClose: () => void;
+};
+
+function ViewFundModal({ record, onClose }: ViewFundModalProps) {
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  // How much of the target is collected (max 100%)
+  const target = toNumber(record.target);
+  const progress = target > 0 ? Math.min(100, Math.round((toNumber(record.closing) / target) * 100)) : 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-4 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold">Fund Details</h2>
+            <p className="truncate text-[11px] text-slate-400">{record.name}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Status */}
+        <div className="mt-3 flex items-center justify-between rounded-lg border border-[#272D39] bg-white/3 px-3 py-2">
+          <span className="text-[11px] text-slate-400">Status</span>
+          <Badge tone={record.status === "Active" ? "green" : "gray"}>{record.status}</Badge>
+        </div>
+
+        {/* Closing balance + progress to target */}
+        <div className="mt-2 rounded-lg border border-[#272D39] bg-white/3 px-3 py-2.5">
+          <p className="text-[11px] text-slate-400">Closing Balance</p>
+          <p className="mt-0.5 text-lg font-bold">{record.closing}</p>
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+            <span
+              className="block h-full rounded-full bg-linear-to-r from-[#6C63FF] to-[#4DA3FF]"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <p className="mt-1 text-[10px] text-slate-400">
+            {progress}% of target {record.target}
+          </p>
+        </div>
+
+        {/* Fund details */}
+        <div className="mt-2 rounded-lg border border-[#272D39] bg-white/3 px-3">
+          <DetailRow label="Fund Name" value={record.name} />
+          <DetailRow label="Purpose" value={record.purpose} />
+          <DetailRow label="Opening Balance" value={record.opening} />
+          <DetailRow label="Contributions" value={record.contributions} />
+          <DetailRow label="Utilization" value={record.utilization} />
+          <DetailRow label="Target Amount" value={record.target} />
+        </div>
+
+        {/* Actions */}
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Close
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ---------- Edit Fund popup ---------- */
+
+type EditFundModalProps = {
+  record: Fund;
+  onClose: () => void;
+  onSubmit: (updated: Fund) => void;
+};
+
+function EditFundModal({ record, onClose, onSubmit }: EditFundModalProps) {
+  const [name, setName] = useState(record.name);
+  const [purpose, setPurpose] = useState(record.purpose);
+  const [target, setTarget] = useState(String(toNumber(record.target)));
+  const [status, setStatus] = useState<FundStatus>(record.status);
+  const [error, setError] = useState("");
+
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const num = Number(target);
+
+    if (!name.trim()) {
+      setError("Please enter the fund name.");
+      return;
+    }
+    if (!num || num <= 0) {
+      setError("Please enter a valid target amount.");
+      return;
+    }
+
+    onSubmit({
+      ...record,
+      name: name.trim(),
+      purpose: purpose.trim(),
+      target: toMoney(num),
+      status,
+    });
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold">Edit Fund</h2>
+            <p className="text-[11px] text-slate-400">
+              Update the details of {record.name}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Form fields */}
+        <div className="mt-4 flex flex-col gap-3">
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Fund Name
+            <input
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setError("");
+              }}
+              className={field}
+              autoFocus
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Purpose
+            <input
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value)}
+              placeholder="e.g. Major repairs"
+              className={field}
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Target Amount (₹)
+              <input
+                type="number"
+                min={0}
+                value={target}
+                onChange={(e) => {
+                  setTarget(e.target.value);
+                  setError("");
+                }}
+                className={field}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Status
+              <div className="relative">
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as FundStatus)}
+                  className={`${field} cursor-pointer appearance-none pr-8`}
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+              </div>
+            </label>
+          </div>
+
+          {error && <p className="text-[11px] text-red-400">{error}</p>}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="cursor-pointer rounded-lg bg-linear-to-r from-[#6C63FF] to-[#4DA3FF] px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90 active:scale-95"
+          >
+            Save Changes
+          </button>
+        </div>
+      </motion.form>
+    </motion.div>
+  );
+}
+
+/* ---------- Delete confirm popup ---------- */
+
+type DeleteConfirmProps = {
+  record: Fund;
+  onClose: () => void;
+  onConfirm: () => void;
+};
+
+function DeleteConfirm({ record, onClose, onConfirm }: DeleteConfirmProps) {
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="w-full max-w-sm rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/15 text-red-400">
+            <Trash2 className="h-4 w-4" />
+          </span>
+          <div>
+            <h2 className="text-base font-bold">Delete Fund</h2>
+            <p className="text-[11px] text-slate-400">
+              This action cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        <p className="mt-4 text-xs text-slate-300">
+          Are you sure you want to delete{" "}
+          <span className="font-semibold text-white">{record.name}</span>? Its
+          balance of {record.closing} will be removed from this list.
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="cursor-pointer rounded-lg bg-red-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-red-600 active:scale-95"
+          >
+            Delete
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 /* ---------- Page ---------- */
 export default function SinkingFundPage() {
-  const [fund, setFund] = useState(fundOptions[0]);
+  const [funds, setFunds] = useState<Fund[]>(initialFunds);
+  const [fund, setFund] = useState("All Funds");
   const [status, setStatus] = useState(statusOptions[0]);
   const [q, setQ] = useState("");
   // Controls the Create Reserve Fund drawer (open / closed)
   const [addOpen, setAddOpen] = useState(false);
+
+  // Fund open in the View / Edit / Delete popup (null = closed)
+  const [viewing, setViewing] = useState<Fund | null>(null);
+  const [editing, setEditing] = useState<Fund | null>(null);
+  const [deleting, setDeleting] = useState<Fund | null>(null);
+  // Small success message after an action
+  const [toast, setToast] = useState("");
+
+  // Hide the success message after 3 seconds
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // Fund dropdown always follows the current list (rename / delete safe)
+  const fundOptions = useMemo(
+    () => ["All Funds", ...funds.map((f) => f.name)],
+    [funds],
+  );
 
   // Filter rows by fund, status and search text
   const list = useMemo(() => {
@@ -206,12 +594,54 @@ export default function SinkingFundPage() {
         (status === "Status" || f.status === status) &&
         (!s || `${f.name} ${f.purpose}`.toLowerCase().includes(s)),
     );
-  }, [fund, status, q]);
+  }, [funds, fund, status, q]);
+
+  // Top summary cards: "Total Funds" is calculated from the list
+  const activeCount = funds.filter((f) => f.status === "Active").length;
+  const stats = [
+    {
+      label: "Total Funds",
+      value: String(funds.length),
+      sub: `${activeCount} Active | ${funds.length - activeCount} Inactive`,
+      pct: "",
+      up: true,
+      good: true,
+      icon: Landmark,
+      c: BLUE,
+    },
+    ...otherStats,
+  ];
 
   // Called when the drawer form is saved
   const handleSaveFund = (data: AddReserveFundPayload) => {
     // TODO: call the API here, then refresh the funds table / stat cards
     console.log("Reserve fund saved:", data);
+  };
+
+  // Edit: save the changed details (replace with an API call later)
+  const handleEdit = (updated: Fund) => {
+    const old = funds.find((f) => f.id === updated.id);
+    setFunds((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+    // Keep the fund filter working if the selected fund was renamed
+    if (old && fund === old.name) setFund(updated.name);
+    setToast(`${updated.name} updated`);
+    setEditing(null);
+  };
+
+  // Activate / Deactivate: flips the status (replace with an API call later)
+  const toggleStatus = (f: Fund) => {
+    const next: FundStatus = f.status === "Active" ? "Inactive" : "Active";
+    setFunds((prev) => prev.map((x) => (x.id === f.id ? { ...x, status: next } : x)));
+    setToast(`${f.name} is now ${next}`);
+  };
+
+  // Delete: removes the fund (replace with an API call later)
+  const handleDelete = () => {
+    if (!deleting) return;
+    setFunds((prev) => prev.filter((f) => f.id !== deleting.id));
+    if (fund === deleting.name) setFund("All Funds");
+    setToast(`${deleting.name} deleted`);
+    setDeleting(null);
   };
 
   return (
@@ -536,14 +966,58 @@ export default function SinkingFundPage() {
                         {f.status}
                       </Badge>
                     </td>
+
+                    {/* Actions: icons directly in the row (no 3-dot menu) */}
                     <td className={`${td} text-right`}>
-                      <button
-                        type="button"
-                        aria-label="Actions"
-                        className="cursor-pointer rounded-md p-1 text-slate-400 hover:bg-white/5"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-0.5">
+                        {/* View Details */}
+                        <button
+                          type="button"
+                          title="View Details"
+                          aria-label="View Details"
+                          onClick={() => setViewing(f)}
+                          className={`${iconBtn} text-slate-400 hover:bg-white/5 hover:text-white`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+
+                        {/* Edit */}
+                        <button
+                          type="button"
+                          title="Edit"
+                          aria-label="Edit"
+                          onClick={() => setEditing(f)}
+                          className={`${iconBtn} text-slate-400 hover:bg-white/5 hover:text-[#A29CFF]`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+
+                        {/* Activate / Deactivate */}
+                        <button
+                          type="button"
+                          title={f.status === "Active" ? "Deactivate" : "Activate"}
+                          aria-label={f.status === "Active" ? "Deactivate" : "Activate"}
+                          onClick={() => toggleStatus(f)}
+                          className={`${iconBtn} ${
+                            f.status === "Active"
+                              ? "text-emerald-400 hover:bg-emerald-500/10"
+                              : "text-slate-500 hover:bg-white/5 hover:text-white"
+                          }`}
+                        >
+                          <Power className="h-4 w-4" />
+                        </button>
+
+                        {/* Delete */}
+                        <button
+                          type="button"
+                          title="Delete"
+                          aria-label="Delete"
+                          onClick={() => setDeleting(f)}
+                          className={`${iconBtn} text-red-400 hover:bg-red-500/10`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </motion.tr>
                 ))}
@@ -565,7 +1039,7 @@ export default function SinkingFundPage() {
           {/* Pagination */}
           <div className="mt-4 flex flex-col items-center justify-between gap-3 text-[11px] text-slate-400 sm:flex-row">
             <span>
-              Showing 1-{list.length} of {funds.length} funds
+              Showing {list.length ? `1-${list.length}` : "0"} of {funds.length} funds
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -599,6 +1073,57 @@ export default function SinkingFundPage() {
         onClose={() => setAddOpen(false)}
         onSave={handleSaveFund}
       />
+
+      {/* View Details popup */}
+      <AnimatePresence>
+        {viewing && (
+          <ViewFundModal
+            key={viewing.id}
+            record={viewing}
+            onClose={() => setViewing(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Edit popup */}
+      <AnimatePresence>
+        {editing && (
+          <EditFundModal
+            key={editing.id}
+            record={editing}
+            onClose={() => setEditing(null)}
+            onSubmit={handleEdit}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete confirm popup */}
+      <AnimatePresence>
+        {deleting && (
+          <DeleteConfirm
+            key={deleting.id}
+            record={deleting}
+            onClose={() => setDeleting(null)}
+            onConfirm={handleDelete}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Success message */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="fixed right-4 top-20 z-80 flex max-w-[90vw] items-center gap-2 rounded-lg border border-emerald-500/30 bg-[#10131A] px-4 py-3 text-xs text-emerald-400 shadow-xl"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  MoreVertical,
   Eye,
   Download,
   Trash2,
@@ -94,117 +93,9 @@ const td = "border-t border-[#272D39] px-2 py-2.5";
 const field =
   "w-full rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60";
 
-/* ---------- Row actions menu (3 dots) ---------- */
-
-const MENU_W = 176; // menu width in px
-const MENU_H = 128; // approx menu height, used to flip it upwards near the screen bottom
-
-function RowActions({
-  report,
-  onView,
-  onDownload,
-  onDelete,
-}: {
-  report: Report;
-  onView: () => void;
-  onDownload: () => void;
-  onDelete: () => void;
-}) {
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-
-  const close = useCallback(() => setPos(null), []);
-
-  // Open the menu next to the button (fixed position, so the table does not clip it)
-  function toggle() {
-    if (pos) return close();
-    const r = btnRef.current?.getBoundingClientRect();
-    if (!r) return;
-    const left = Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8));
-    const openUp = r.bottom + MENU_H + 8 > window.innerHeight;
-    const top = openUp ? r.top - MENU_H - 4 : r.bottom + 4;
-    setPos({ top, left });
-  }
-
-  // Close on Esc, scroll or resize while the menu is open
-  useEffect(() => {
-    if (!pos) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
-  }, [pos, close]);
-
-  const ready = report.status === "Ready";
-
-  const itemCls =
-    "flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-[11px] transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
-
-  return (
-    <>
-      <button
-        ref={btnRef}
-        type="button"
-        aria-label="Actions"
-        aria-haspopup="menu"
-        aria-expanded={!!pos}
-        onClick={toggle}
-        className={`cursor-pointer rounded-md p-1 text-slate-400 hover:bg-white/5 ${pos ? "bg-white/5 text-white" : ""}`}
-      >
-        <MoreVertical className="h-4 w-4" />
-      </button>
-
-      {pos &&
-        createPortal(
-          <>
-            {/* Transparent backdrop: click outside closes the menu */}
-            <div className="fixed inset-0 z-90" onClick={close} />
-            <div
-              role="menu"
-              style={{ top: pos.top, left: pos.left, width: MENU_W }}
-              className="fixed z-91 rounded-lg border border-[#272D39] bg-[#10131A] p-1 text-white shadow-2xl"
-            >
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => { close(); onView(); }}
-                className={itemCls}
-              >
-                <Eye className="h-3.5 w-3.5 text-slate-400" /> View Details
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={!ready}
-                title={ready ? "" : "Report is still processing"}
-                onClick={() => { close(); onDownload(); }}
-                className={itemCls}
-              >
-                <Download className="h-3.5 w-3.5 text-slate-400" /> Download
-              </button>
-              <div className="my-1 h-px bg-[#272D39]" />
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => { close(); onDelete(); }}
-                className={`${itemCls} text-red-400`}
-              >
-                <Trash2 className="h-3.5 w-3.5" /> Delete
-              </button>
-            </div>
-          </>,
-          document.body,
-        )}
-    </>
-  );
-}
+// Small icon button used in the Actions column
+const iconBtn =
+  "cursor-pointer rounded-md p-1.5 transition active:scale-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:active:scale-100";
 
 /* ---------- Small centered dialog (used for View + Delete) ---------- */
 
@@ -458,13 +349,48 @@ export default function AuditReportsPage() {
                         {r.status}
                       </Badge>
                     </td>
+
+                    {/* Actions: icons directly in the row (no 3-dot menu) */}
                     <td className={`${td} text-right`}>
-                      <RowActions
-                        report={r}
-                        onView={() => setViewing(r)}
-                        onDownload={() => handleDownload(r)}
-                        onDelete={() => setDeleting(r)}
-                      />
+                      <div className="flex items-center justify-end gap-0.5">
+                        {/* View Details */}
+                        <button
+                          type="button"
+                          title="View Details"
+                          aria-label="View Details"
+                          onClick={() => setViewing(r)}
+                          className={`${iconBtn} text-slate-400 hover:bg-white/5 hover:text-white`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+
+                        {/* Download: only when the report is ready */}
+                        <button
+                          type="button"
+                          title={
+                            r.status === "Ready"
+                              ? "Download"
+                              : "Report is still processing"
+                          }
+                          aria-label="Download"
+                          disabled={r.status !== "Ready"}
+                          onClick={() => handleDownload(r)}
+                          className={`${iconBtn} text-slate-400 hover:bg-[#4DA3FF]/10 hover:text-[#4DA3FF]`}
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+
+                        {/* Delete */}
+                        <button
+                          type="button"
+                          title="Delete"
+                          aria-label="Delete"
+                          onClick={() => setDeleting(r)}
+                          className={`${iconBtn} text-red-400 hover:bg-red-500/10`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </motion.tr>
                 ))}

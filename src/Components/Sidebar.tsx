@@ -15,9 +15,17 @@ type SidebarProps = {
 /* Logo file: image placed in the public folder (change this if you rename it) */
 const LOGO_SRC = '/logo (2).png'
 
-/* One shared smooth curve + duration for all animations */
+/* One shared smooth curve + duration for width / position animations */
 const SMOOTH =
-  'duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none'
+  'duration-[500ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none'
+
+/* Text / card fade:
+   - collapsing: text fades out FAST (before the sidebar gets narrow)
+   - expanding: text fades in SLOWLY after the sidebar has started opening */
+const fadeClass = (collapsed: boolean) =>
+  collapsed
+    ? 'lg:opacity-0 lg:duration-150 lg:delay-0 lg:ease-in'
+    : 'opacity-100 duration-300 delay-150 ease-out'
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname()
@@ -59,7 +67,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       <aside
         className={`
           fixed inset-y-0 left-0 z-50 flex h-dvh w-[270px] max-w-[85vw] shrink-0 flex-col overflow-x-hidden
-          border-r border-[#272D39] bg-[#10131A] text-white
+          border-r border-[#272D39] bg-[#10131A] text-white will-change-[width]
           transition-[transform,width] ${SMOOTH}
           lg:sticky lg:top-0 lg:z-30 lg:max-w-none lg:translate-x-0
           ${collapsed ? 'lg:w-[76px]' : 'lg:w-[270px]'}
@@ -90,10 +98,11 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               />
             )}
 
+            {/* Brand text: fixed width, only fades + slides (no width animation = no jerk) */}
             <div
-              className={`ml-3 min-w-0 max-w-[140px] overflow-hidden leading-tight transition-[max-width,opacity,margin] ${SMOOTH} ${
-                collapsed ? 'lg:ml-0 lg:max-w-0 lg:opacity-0' : 'opacity-100'
-              }`}
+              className={`ml-3 w-[140px] shrink-0 whitespace-nowrap leading-tight transition-[opacity,transform] ${fadeClass(
+                collapsed
+              )} ${collapsed ? 'lg:-translate-x-2' : 'translate-x-0'}`}
             >
               <p className="truncate text-sm font-semibold">SocietyOS</p>
               <p className="truncate text-[10px] text-slate-400">
@@ -131,16 +140,20 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           )}
         </button>
 
-        {/* Society card (smoothly folds up when collapsed) */}
+        {/* Society card: height folds smoothly, content fades separately */}
         <div
-          className={`mx-4 grid transition-[grid-template-rows,opacity,margin] ${SMOOTH} ${
+          className={`mx-4 grid transition-[grid-template-rows,margin] ${SMOOTH} ${
             collapsed
-              ? 'mb-4 grid-rows-[1fr] lg:mb-0 lg:grid-rows-[0fr] lg:opacity-0'
-              : 'mb-4 grid-rows-[1fr] opacity-100'
+              ? 'mb-4 grid-rows-[1fr] lg:mb-0 lg:grid-rows-[0fr]'
+              : 'mb-4 grid-rows-[1fr]'
           }`}
         >
           <div className="min-h-0 overflow-hidden">
-            <div className="rounded-lg border border-[#272D39] bg-white/[0.03] px-3 py-2.5">
+            <div
+              className={`rounded-lg border border-[#272D39] bg-white/[0.03] px-3 py-2.5 transition-opacity ${fadeClass(
+                collapsed
+              )}`}
+            >
               <p className="truncate text-xs font-semibold">Green Valley Residency</p>
               <p className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400">
                 <MapPin className="h-3 w-3 shrink-0" />
@@ -153,14 +166,16 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         {/* Nav (scrollable, scrollbar hidden) */}
         <div
           className="
-            flex-1 overflow-y-auto px-4 pb-6
+            flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6
             [scrollbar-width:none] [-ms-overflow-style:none]
             [&::-webkit-scrollbar]:hidden
           "
         >
           <p
-            className={`overflow-hidden whitespace-nowrap px-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500 transition-[height,margin,opacity] ${SMOOTH} ${
-              collapsed ? 'mb-2 h-4 lg:mb-0 lg:h-0 lg:opacity-0' : 'mb-2 h-4 opacity-100'
+            className={`overflow-hidden whitespace-nowrap px-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500 transition-[height,margin,opacity] ${
+              collapsed
+                ? 'mb-2 h-4 lg:mb-0 lg:h-0 lg:opacity-0 lg:duration-150 lg:ease-in'
+                : 'mb-2 h-4 opacity-100 duration-300 delay-150 ease-out'
             }`}
           >
             Main
@@ -187,10 +202,11 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                   <Icon
                     className={`h-4 w-4 shrink-0 ${active ? 'text-[#8B85FF]' : ''}`}
                   />
+                  {/* Label: stays in place, only fades + slides (icon never shifts) */}
                   <span
-                    className={`ml-3 max-w-[180px] overflow-hidden whitespace-nowrap transition-[max-width,opacity,margin] ${SMOOTH} ${
-                      collapsed ? 'lg:ml-0 lg:max-w-0 lg:opacity-0' : 'opacity-100'
-                    }`}
+                    className={`ml-3 shrink-0 whitespace-nowrap transition-[opacity,transform] ${fadeClass(
+                      collapsed
+                    )} ${collapsed ? 'lg:-translate-x-2' : 'translate-x-0'}`}
                   >
                     {label}
                   </span>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { motion, type Variants } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   Wallet,
   AlertCircle,
@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  X,
 } from "lucide-react";
 import { Card, Badge } from "@/Components/ui";
 import RecordPaymentModal, {
@@ -117,6 +118,14 @@ const toneFor = (s: Status) =>
       ? "red"
       : "orange";
 
+/* ---------- Money helpers ---------- */
+
+// "₹ 12,000" -> 12000
+const toNumber = (v: string) => Number(v.replace(/[^\d.]/g, "")) || 0;
+
+// 12000 -> "₹ 12,000" (Indian number format)
+const toMoney = (n: number) => `₹ ${n.toLocaleString("en-IN")}`;
+
 /* ---------- Shared styles (same as Residents) ---------- */
 
 const th =
@@ -125,10 +134,152 @@ const td = "border-t border-[#272D39] px-2 py-2.5";
 const field =
   "w-full rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60";
 
+/* ---------- View Bill popup (small, centered) ---------- */
+
+// One detail row (label on the left, value on the right).
+// Defined outside the popup so it is not re-created on every render.
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-[#272D39] py-2 text-[11px] first:border-t-0">
+      <span className="text-slate-400">{label}</span>
+      <span className="text-right font-medium text-slate-200">{value}</span>
+    </div>
+  );
+}
+
+type ViewBillDrawerProps = {
+  bill: Payable;
+  onClose: () => void;
+};
+
+function ViewBillDrawer({ bill, onClose }: ViewBillDrawerProps) {
+  const total = toNumber(bill.amount);
+  const balance = toNumber(bill.balance);
+  const paid = Math.max(total - balance, 0);
+  const percent = total > 0 ? Math.round((paid / total) * 100) : 0;
+
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-4 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold">Bill Details</h2>
+            <p className="truncate text-[11px] text-slate-400">
+              {bill.vendor} · {bill.invoiceNo}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Status */}
+        <div className="mt-3 flex items-center justify-between rounded-lg border border-[#272D39] bg-white/3 px-3 py-2">
+          <span className="text-[11px] text-slate-400">Status</span>
+          <Badge tone={toneFor(bill.status)}>{bill.status}</Badge>
+        </div>
+
+        {/* Amount summary */}
+        <div className="mt-2 grid grid-cols-3 gap-2 rounded-lg border border-[#272D39] bg-white/3 p-3 text-[11px]">
+          <div>
+            <p className="text-slate-400">Total</p>
+            <p className="mt-0.5 font-semibold">{bill.amount}</p>
+          </div>
+          <div>
+            <p className="text-slate-400">Paid</p>
+            <p className="mt-0.5 font-semibold text-emerald-400">
+              {toMoney(paid)}
+            </p>
+          </div>
+          <div>
+            <p className="text-slate-400">Balance</p>
+            <p
+              className={`mt-0.5 font-semibold ${
+                balance === 0 ? "text-slate-400" : "text-red-400"
+              }`}
+            >
+              {bill.balance}
+            </p>
+          </div>
+        </div>
+
+        {/* Payment progress */}
+        <div className="mt-2 rounded-lg border border-[#272D39] bg-white/3 px-3 py-2.5">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-slate-400">Payment progress</span>
+            <span className="font-semibold">{percent}%</span>
+          </div>
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/8">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${percent}%` }}
+              transition={{ duration: 0.8, ease: EASE, delay: 0.15 }}
+              className="h-full rounded-full bg-linear-to-r from-[#6C63FF] to-[#4DA3FF]"
+            />
+          </div>
+        </div>
+
+        {/* Bill details */}
+        <div className="mt-2 rounded-lg border border-[#272D39] bg-white/3 px-3">
+          <DetailRow label="Vendor Name" value={bill.vendor} />
+          <DetailRow label="Invoice No." value={bill.invoiceNo} />
+          <DetailRow label="Bill Date" value={bill.billDate} />
+          <DetailRow label="Due Date" value={bill.dueDate} />
+        </div>
+
+        {/* Actions */}
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Close
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 /* ---------- Page ---------- */
 export default function AccountsPayablePage() {
   const [payables, setPayables] = useState<Payable[]>(initialPayables);
   const [open, setOpen] = useState(false);
+
+  // Invoice number of the bill open in the View popup (null = popup closed)
+  const [viewInvoice, setViewInvoice] = useState<string | null>(null);
 
   const [vendor, setVendor] = useState(vendorOptions[0]);
   const [status, setStatus] = useState(statusOptions[0]);
@@ -145,6 +296,9 @@ export default function AccountsPayablePage() {
         (!s || `${p.vendor} ${p.invoiceNo}`.toLowerCase().includes(s)),
     );
   }, [payables, vendor, status, q]);
+
+  // Always read the latest data of the bill being viewed
+  const viewedBill = payables.find((p) => p.invoiceNo === viewInvoice) ?? null;
 
   // Update the matching bill after a payment is recorded (replace with an API call later)
   const handleSave = (data: RecordPaymentPayload) => {
@@ -346,6 +500,7 @@ export default function AccountsPayablePage() {
                     <td className={`${td} text-right`}>
                       <button
                         type="button"
+                        onClick={() => setViewInvoice(p.invoiceNo)}
                         className="cursor-pointer rounded-md border border-[#272D39] px-3 py-1 text-[10px] font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
                       >
                         View
@@ -410,6 +565,17 @@ export default function AccountsPayablePage() {
         onClose={() => setOpen(false)}
         onSave={handleSave}
       />
+
+      {/* View Bill popup */}
+      <AnimatePresence>
+        {viewedBill && (
+          <ViewBillDrawer
+            key={viewedBill.invoiceNo}
+            bill={viewedBill}
+            onClose={() => setViewInvoice(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

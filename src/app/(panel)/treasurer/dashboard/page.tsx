@@ -36,44 +36,113 @@ const PURPLE = '#8B5CF6'
 // Logged-in user name (replace with real user data later)
 const USER_NAME = 'Rahul'
 
-// Financial year options for the date range selector
-const periods = ['Apr 2025 - Mar 2026', 'Apr 2024 - Mar 2025', 'Apr 2023 - Mar 2024']
-
-// Top summary cards.
-// up = arrow direction, good = green (true) or red (false), note = text after the trend
-const stats = [
-  { label: 'Total Income', value: '₹ 8,45,000', pct: '12%', up: true, good: true, note: 'vs last month', icon: Wallet, c: BLUE },
-  { label: 'Total Expenses', value: '₹ 5,32,000', pct: '8%', up: true, good: false, note: 'vs last month', icon: Receipt, c: ORANGE },
-  { label: 'Net Surplus', value: '₹ 3,13,000', pct: '15%', up: true, good: true, note: 'vs last month', icon: TrendingUp, c: GREEN },
-  { label: 'Outstanding Receivables', value: '₹ 2,48,000', pct: '', up: false, good: false, note: '12 Flats Overdue', icon: AlertCircle, c: RED },
-]
-
-// Income vs Expenses (values in Lakh), 12 months of the financial year
+// Income vs Expenses chart scale (values in Lakh)
 const CHART_MAX = 8
 const chartTicks = [8, 6, 4, 2, 0]
-const incomeExpense = [
-  { m: 'Apr', inc: 5.2, exp: 3.4 },
-  { m: 'May', inc: 6.1, exp: 4.0 },
-  { m: 'Jun', inc: 5.8, exp: 3.9 },
-  { m: 'Jul', inc: 6.6, exp: 4.4 },
-  { m: 'Aug', inc: 6.0, exp: 4.1 },
-  { m: 'Sep', inc: 7.0, exp: 4.6 },
-  { m: 'Oct', inc: 6.4, exp: 4.2 },
-  { m: 'Nov', inc: 7.2, exp: 4.8 },
-  { m: 'Dec', inc: 6.8, exp: 4.5 },
-  { m: 'Jan', inc: 7.5, exp: 5.0 },
-  { m: 'Feb', inc: 7.1, exp: 4.7 },
-  { m: 'Mar', inc: 7.8, exp: 5.3 },
-]
 
-// Expense breakdown (pct values add up to 100)
-const expenseBreakdown = [
-  { l: 'Security', pct: 28, c: BLUE },
-  { l: 'Housekeeping', pct: 20, c: PURPLE },
-  { l: 'Lift Maintenance', pct: 15, c: GREEN },
-  { l: 'Electricity', pct: 12, c: ORANGE },
-  { l: 'Others', pct: 25, c: '#F97316' },
-]
+// Data for each financial year. When the period changes, everything on the page uses this data.
+const periodData = {
+  'Apr 2025 - Mar 2026': {
+    income: '₹ 8,45,000', incomePct: '12%',
+    expenses: '₹ 5,32,000', expensesPct: '8%',
+    surplus: '₹ 3,13,000', surplusPct: '15%',
+    receivables: '₹ 2,48,000', overdue: '12 Flats Overdue',
+    totalExpenses: '₹ 5.32L',
+    chart: [
+      { m: 'Apr', inc: 5.2, exp: 3.4 },
+      { m: 'May', inc: 6.1, exp: 4.0 },
+      { m: 'Jun', inc: 5.8, exp: 3.9 },
+      { m: 'Jul', inc: 6.6, exp: 4.4 },
+      { m: 'Aug', inc: 6.0, exp: 4.1 },
+      { m: 'Sep', inc: 7.0, exp: 4.6 },
+      { m: 'Oct', inc: 6.4, exp: 4.2 },
+      { m: 'Nov', inc: 7.2, exp: 4.8 },
+      { m: 'Dec', inc: 6.8, exp: 4.5 },
+      { m: 'Jan', inc: 7.5, exp: 5.0 },
+      { m: 'Feb', inc: 7.1, exp: 4.7 },
+      { m: 'Mar', inc: 7.8, exp: 5.3 },
+    ],
+    breakdown: [
+      { l: 'Security', pct: 28, c: BLUE },
+      { l: 'Housekeeping', pct: 20, c: PURPLE },
+      { l: 'Lift Maintenance', pct: 15, c: GREEN },
+      { l: 'Electricity', pct: 12, c: ORANGE },
+      { l: 'Others', pct: 25, c: '#F97316' },
+    ],
+  },
+  'Apr 2024 - Mar 2025': {
+    income: '₹ 7,62,000', incomePct: '9%',
+    expenses: '₹ 4,95,000', expensesPct: '6%',
+    surplus: '₹ 2,67,000', surplusPct: '11%',
+    receivables: '₹ 1,95,000', overdue: '9 Flats Overdue',
+    totalExpenses: '₹ 4.95L',
+    chart: [
+      { m: 'Apr', inc: 4.6, exp: 3.1 },
+      { m: 'May', inc: 5.4, exp: 3.6 },
+      { m: 'Jun', inc: 5.1, exp: 3.5 },
+      { m: 'Jul', inc: 5.9, exp: 4.0 },
+      { m: 'Aug', inc: 5.5, exp: 3.8 },
+      { m: 'Sep', inc: 6.3, exp: 4.2 },
+      { m: 'Oct', inc: 5.8, exp: 3.9 },
+      { m: 'Nov', inc: 6.5, exp: 4.4 },
+      { m: 'Dec', inc: 6.1, exp: 4.1 },
+      { m: 'Jan', inc: 6.8, exp: 4.6 },
+      { m: 'Feb', inc: 6.4, exp: 4.3 },
+      { m: 'Mar', inc: 7.0, exp: 4.8 },
+    ],
+    breakdown: [
+      { l: 'Security', pct: 30, c: BLUE },
+      { l: 'Housekeeping', pct: 18, c: PURPLE },
+      { l: 'Lift Maintenance', pct: 14, c: GREEN },
+      { l: 'Electricity', pct: 13, c: ORANGE },
+      { l: 'Others', pct: 25, c: '#F97316' },
+    ],
+  },
+  'Apr 2023 - Mar 2024': {
+    income: '₹ 6,98,000', incomePct: '7%',
+    expenses: '₹ 4,64,000', expensesPct: '5%',
+    surplus: '₹ 2,34,000', surplusPct: '9%',
+    receivables: '₹ 1,62,000', overdue: '7 Flats Overdue',
+    totalExpenses: '₹ 4.64L',
+    chart: [
+      { m: 'Apr', inc: 4.1, exp: 2.9 },
+      { m: 'May', inc: 4.8, exp: 3.3 },
+      { m: 'Jun', inc: 4.6, exp: 3.2 },
+      { m: 'Jul', inc: 5.3, exp: 3.7 },
+      { m: 'Aug', inc: 5.0, exp: 3.5 },
+      { m: 'Sep', inc: 5.7, exp: 3.9 },
+      { m: 'Oct', inc: 5.3, exp: 3.6 },
+      { m: 'Nov', inc: 5.9, exp: 4.0 },
+      { m: 'Dec', inc: 5.6, exp: 3.8 },
+      { m: 'Jan', inc: 6.2, exp: 4.2 },
+      { m: 'Feb', inc: 5.9, exp: 4.0 },
+      { m: 'Mar', inc: 6.5, exp: 4.4 },
+    ],
+    breakdown: [
+      { l: 'Security', pct: 32, c: BLUE },
+      { l: 'Housekeeping', pct: 17, c: PURPLE },
+      { l: 'Lift Maintenance', pct: 13, c: GREEN },
+      { l: 'Electricity', pct: 14, c: ORANGE },
+      { l: 'Others', pct: 24, c: '#F97316' },
+    ],
+  },
+}
+
+type Period = keyof typeof periodData
+
+// Financial year options for the date range selector
+const periods = Object.keys(periodData) as Period[]
+
+// Builds the top summary cards from the selected period's data.
+// up = arrow direction, good = green (true) or red (false), note = text after the trend
+function buildStats(d: (typeof periodData)[Period]) {
+  return [
+    { label: 'Total Income', value: d.income, pct: d.incomePct, up: true, good: true, note: 'vs last month', icon: Wallet, c: BLUE },
+    { label: 'Total Expenses', value: d.expenses, pct: d.expensesPct, up: true, good: false, note: 'vs last month', icon: Receipt, c: ORANGE },
+    { label: 'Net Surplus', value: d.surplus, pct: d.surplusPct, up: true, good: true, note: 'vs last month', icon: TrendingUp, c: GREEN },
+    { label: 'Outstanding Receivables', value: d.receivables, pct: '', up: false, good: false, note: d.overdue, icon: AlertCircle, c: RED },
+  ]
+}
 
 /* ---------- Small helpers ---------- */
 
@@ -127,6 +196,7 @@ function Donut({
               pathLength={100}
               strokeDasharray={`${s.pct} ${100 - s.pct}`}
               strokeDashoffset={-offset}
+              style={{ transition: 'stroke-dasharray 0.6s ease, stroke-dashoffset 0.6s ease' }}
             />
           )
           offset += s.pct
@@ -140,7 +210,13 @@ function Donut({
 
 /* ---------- Page ---------- */
 export default function FinanceDashboardPage() {
-  const [period, setPeriod] = useState(periods[0])
+  const [period, setPeriod] = useState<Period>(periods[0])
+
+  // Everything below (cards, bars, donut) reads from the selected period
+  const data = periodData[period]
+  const stats = buildStats(data)
+  const incomeExpense = data.chart
+  const expenseBreakdown = data.breakdown
 
   // Start with a fixed text so server and browser render the same HTML,
   // then update it after mount using the real local time (avoids hydration warning)
@@ -168,8 +244,8 @@ export default function FinanceDashboardPage() {
           <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <select
             value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            className="w-full cursor-pointer appearance-none rounded-lg border border-[#272D39] bg-[#10131A] py-2 pl-9 pr-9 text-xs font-medium text-slate-200 outline-none focus:border-[#3B82F6] sm:w-56"
+            onChange={(e) => setPeriod(e.target.value as Period)}
+            className="w-full cursor-pointer appearance-none rounded-lg border border-[#272D39] bg-[#10131A] py-2 pl-9 pr-9 text-xs font-medium text-slate-200 outline-none focus:border-[#A29CFF]/60 sm:w-56"
           >
             {periods.map((p) => (
               <option key={p} value={p} className="bg-[#10131A]">{p}</option>
@@ -255,7 +331,7 @@ export default function FinanceDashboardPage() {
                         style={{ top: `${100 - (t / CHART_MAX) * 100}%` }}
                       />
                     ))}
-                    {/* Bars */}
+                    {/* Bars (animate to the new height when the period changes) */}
                     <div className="absolute inset-0 flex items-end justify-around px-1">
                       {incomeExpense.map(({ m, inc, exp }) => (
                         <div key={m} className="flex h-full items-end gap-[3px]">
@@ -298,7 +374,7 @@ export default function FinanceDashboardPage() {
                 size={170}
                 stroke={18}
               >
-                <span className="text-lg font-bold">₹ 5.32L</span>
+                <span className="text-lg font-bold">{data.totalExpenses}</span>
                 <span className="text-[10px] text-slate-400">Total Expenses</span>
               </Donut>
 

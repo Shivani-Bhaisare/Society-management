@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { motion, type Variants } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   Wallet,
   Receipt,
@@ -12,6 +12,7 @@ import {
   ChevronRight,
   ChevronDown,
   CalendarDays,
+  CheckCircle2,
 } from "lucide-react";
 import { Card, Badge } from "@/Components/ui";
 import AddIncomeEntryModal, { type IncomeEntryPayload } from "@/Components/AddIncomeEntryModal"; // adjust the path to your folder
@@ -47,32 +48,10 @@ const RED = "#EF4444";
 
 /* ---------- Data (replace with API data later) ---------- */
 
-const stats = [
-  {
-    label: "Total Income",
-    value: "₹ 12,50,000",
-    sub: "All income received",
-    subC: "text-emerald-400",
-    icon: Wallet,
-    c: GREEN,
-  },
-  {
-    label: "Total Expenses",
-    value: "₹ 8,75,000",
-    sub: "All expenses paid",
-    subC: "text-red-400",
-    icon: Receipt,
-    c: RED,
-  },
-  {
-    label: "Net Surplus",
-    value: "₹ 3,75,000",
-    sub: "Income minus expenses",
-    subC: "text-slate-400",
-    icon: TrendingUp,
-    c: BLUE,
-  },
-];
+// Totals of the whole financial year (the table below shows only the latest entries)
+const BASE_INCOME = 1250000;
+const BASE_EXPENSE = 875000;
+const BASE_TOTAL_ROWS = 56;
 
 // Income vs Expenses (values in Lakh), 12 months of the financial year
 const CHART_MAX = 8;
@@ -92,8 +71,8 @@ const incomeExpense = [
   { m: "Mar", inc: 7.8, exp: 5.3 },
 ];
 
-// Expense breakdown (pct values add up to 100)
-const expenseBreakdown = [
+// Expense breakdown groups (base % of the base expense, adds up to 100)
+const breakdownBase = [
   { l: "Maintenance", pct: 30, c: BLUE },
   { l: "Security", pct: 25, c: GREEN },
   { l: "Utilities", pct: 20, c: ORANGE },
@@ -101,23 +80,40 @@ const expenseBreakdown = [
   { l: "Others", pct: 10, c: "#F97316" },
 ];
 
+// Expense form category -> breakdown group
+function breakdownGroup(category: string) {
+  switch (category) {
+    case "Maintenance":
+    case "Repairs":
+      return "Maintenance";
+    case "Security":
+      return "Security";
+    case "Electricity":
+      return "Utilities";
+    case "Housekeeping":
+      return "Housekeeping";
+    default:
+      return "Others";
+  }
+}
+
 type Type = "Income" | "Expense";
 
 type Transaction = {
   id: number;
-  date: string;
+  date: string; // yyyy-mm-dd
   type: Type;
   category: string;
   description: string;
-  amount: string;
+  amount: number;
   method: string;
 };
 
-const transactions: Transaction[] = [
-  { id: 1, date: "01 Apr 2025", type: "Income", category: "Maintenance Collection", description: "Maintenance Collection", amount: "₹ 5,300", method: "Online" },
-  { id: 2, date: "07 Apr 2025", type: "Expense", category: "Security", description: "Security Services", amount: "₹ 2,500", method: "Bank Transfer" },
-  { id: 3, date: "12 Apr 2025", type: "Income", category: "Parking", description: "Parking Fees", amount: "₹ 1,200", method: "Cash" },
-  { id: 4, date: "15 Apr 2025", type: "Expense", category: "Electricity", description: "Electricity Bill", amount: "₹ 3,200", method: "Bank Transfer" },
+const baseTransactions: Transaction[] = [
+  { id: 1, date: "2025-04-01", type: "Income", category: "Maintenance Collection", description: "Maintenance Collection", amount: 5300, method: "Online" },
+  { id: 2, date: "2025-04-07", type: "Expense", category: "Security", description: "Security Services", amount: 2500, method: "Bank Transfer" },
+  { id: 3, date: "2025-04-12", type: "Income", category: "Parking", description: "Parking Fees", amount: 1200, method: "Cash" },
+  { id: 4, date: "2025-04-15", type: "Expense", category: "Electricity", description: "Electricity Bill", amount: 3200, method: "Bank Transfer" },
 ];
 
 const periods = [
@@ -125,6 +121,24 @@ const periods = [
   "01 Apr 2024 - 31 Mar 2025",
   "01 Apr 2023 - 31 Mar 2024",
 ];
+
+/* ---------- Helpers ---------- */
+
+// 1250000 -> "₹ 12,50,000" (Indian number format)
+const money = (n: number) => `₹ ${n.toLocaleString("en-IN")}`;
+
+// "2025-04-01" -> "01 Apr 2025"
+const formatDate = (d: string) =>
+  d
+    ? new Date(`${d}T00:00:00`).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "-";
+
+// Makes one CSV cell safe (quotes, commas, new lines)
+const csvCell = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
 
 /* ---------- Shared styles (same as Residents) ---------- */
 
@@ -190,19 +204,144 @@ export default function IncomeExpensePage() {
   // Controls the Add Income / Add Expense modals (open / closed)
   const [incomeOpen, setIncomeOpen] = useState(false);
   const [expenseOpen, setExpenseOpen] = useState(false);
+  // Entries added from the drawers (newest first)
+  const [added, setAdded] = useState<Transaction[]>([]);
+  // Small success message after an action
+  const [toast, setToast] = useState("");
 
-  const list = useMemo(() => transactions, []);
+  // Hide the success message after 3 seconds
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
-  // Called when the Add Income modal is saved
+  // Table rows: new entries on top, then the existing ones
+  const list = useMemo(() => [...added, ...baseTransactions], [added]);
+
+  // Totals = base totals + everything added from the drawers
+  const totals = useMemo(() => {
+    const inc = added.filter((t) => t.type === "Income").reduce((s, t) => s + t.amount, 0);
+    const exp = added.filter((t) => t.type === "Expense").reduce((s, t) => s + t.amount, 0);
+    return { income: BASE_INCOME + inc, expense: BASE_EXPENSE + exp };
+  }, [added]);
+
+  const surplus = totals.income - totals.expense;
+
+  const stats = [
+    {
+      label: "Total Income",
+      value: money(totals.income),
+      sub: "All income received",
+      subC: "text-emerald-400",
+      icon: Wallet,
+      c: GREEN,
+    },
+    {
+      label: "Total Expenses",
+      value: money(totals.expense),
+      sub: "All expenses paid",
+      subC: "text-red-400",
+      icon: Receipt,
+      c: RED,
+    },
+    {
+      label: "Net Surplus",
+      value: money(surplus),
+      sub: "Income minus expenses",
+      subC: surplus < 0 ? "text-red-400" : "text-slate-400",
+      icon: TrendingUp,
+      c: BLUE,
+    },
+  ];
+
+  // Expense breakdown: base amount of each group + new expenses of that group
+  const breakdown = useMemo(() => {
+    const amounts = breakdownBase.map(({ l, pct, c }) => {
+      const extra = added
+        .filter((t) => t.type === "Expense" && breakdownGroup(t.category) === l)
+        .reduce((s, t) => s + t.amount, 0);
+      return { l, c, amount: (pct / 100) * BASE_EXPENSE + extra };
+    });
+    const total = amounts.reduce((s, a) => s + a.amount, 0) || 1;
+    return amounts.map((a) => ({ ...a, pct: (a.amount / total) * 100 }));
+  }, [added]);
+
+  // Called when the Add Income drawer is saved (replace with an API call later)
   const handleSaveIncome = (data: IncomeEntryPayload) => {
-    // TODO: call the API here, then refresh the transactions list / stat cards
-    console.log("Income saved:", data);
+    setAdded((prev) => [
+      {
+        id: data.id,
+        date: data.date,
+        type: "Income",
+        category: data.category,
+        description: data.title,
+        amount: data.amount,
+        method: data.method,
+      },
+      ...prev,
+    ]);
+    setToast(`${data.title} added to income`);
   };
 
-  // Called when the Add Expense modal is saved
+  // Called when the Add Expense drawer is saved (replace with an API call later)
   const handleSaveExpense = (data: ExpenseEntryPayload) => {
-    // TODO: call the API here, then refresh the transactions list / stat cards
-    console.log("Expense saved:", data);
+    setAdded((prev) => [
+      {
+        id: data.id,
+        date: data.date,
+        type: "Expense",
+        category: data.category,
+        description: data.title,
+        amount: data.amount,
+        method: data.method,
+      },
+      ...prev,
+    ]);
+    setToast(`${data.title} added to expenses`);
+  };
+
+  // Export Report: downloads a CSV (summary + category breakdown + transactions)
+  const handleExport = () => {
+    const rows: (string | number)[][] = [
+      ["Income & Expenses Report"],
+      ["Period", period],
+      [],
+      ["Summary"],
+      ["Total Income", totals.income],
+      ["Total Expenses", totals.expense],
+      ["Net Surplus", surplus],
+      [],
+      ["Expense Breakdown"],
+      ["Category", "Amount", "Share %"],
+      ...breakdown.map((b) => [b.l, Math.round(b.amount), b.pct.toFixed(1)]),
+      [],
+      ["Recent Transactions"],
+      ["Date", "Type", "Category", "Description", "Amount", "Payment Method"],
+      ...list.map((t) => [
+        formatDate(t.date),
+        t.type,
+        t.category,
+        t.description,
+        t.amount,
+        t.method || "-",
+      ]),
+    ];
+
+    const csv = rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
+    // "\uFEFF" makes Excel read the file correctly
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `income-expense-${period.replace(/\s+/g, "").replace(/-/g, "_")}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    setToast("Report downloaded");
   };
 
   return (
@@ -222,7 +361,7 @@ export default function IncomeExpensePage() {
           </p>
         </motion.div>
 
-        {/* Buttons: Add Income / Add Expense open their modals */}
+        {/* Buttons: Add Income / Add Expense open their drawers, Export downloads a CSV */}
         <motion.div variants={item} className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -240,6 +379,7 @@ export default function IncomeExpensePage() {
           </button>
           <button
             type="button"
+            onClick={handleExport}
             className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#272D39] px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
           >
             <Download className="h-3.5 w-3.5" /> Export Report
@@ -259,7 +399,7 @@ export default function IncomeExpensePage() {
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
-          className="w-full cursor-pointer appearance-none rounded-lg border border-[#272D39] bg-[#10131A] py-2 pl-9 pr-9 text-xs font-medium text-slate-200 outline-none focus:border-[#3B82F6]"
+          className="w-full cursor-pointer appearance-none rounded-lg border border-[#272D39] bg-[#10131A] py-2 pl-9 pr-9 text-xs font-medium text-slate-200 outline-none focus:border-[#A29CFF]/60"
         >
           {periods.map((p) => (
             <option key={p} value={p} className="bg-[#10131A]">
@@ -394,17 +534,19 @@ export default function IncomeExpensePage() {
           <Card title="Expense Breakdown" sub="Category-wise spending">
             <div className="flex flex-col items-center gap-5 min-[480px]:flex-row xl:flex-col 2xl:flex-row">
               <Donut
-                segments={expenseBreakdown.map(({ pct, c }) => ({ pct, c }))}
+                segments={breakdown.map(({ pct, c }) => ({ pct, c }))}
                 size={170}
                 stroke={18}
               >
-                <span className="text-lg font-bold">₹ 8.75L</span>
+                <span className="text-lg font-bold">
+                  ₹ {(totals.expense / 100000).toFixed(2)}L
+                </span>
                 <span className="text-[10px] text-slate-400">Total Expenses</span>
               </Donut>
 
               {/* Legend */}
               <div className="flex w-full min-w-0 flex-1 flex-col gap-3">
-                {expenseBreakdown.map(({ l, pct, c }) => (
+                {breakdown.map(({ l, pct, c }) => (
                   <div key={l} className="flex items-center gap-2 text-xs">
                     <i
                       className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -413,7 +555,7 @@ export default function IncomeExpensePage() {
                     <span className="min-w-0 flex-1 truncate text-slate-300">
                       {l}
                     </span>
-                    <span className="shrink-0 font-semibold">{pct}%</span>
+                    <span className="shrink-0 font-semibold">{Math.round(pct)}%</span>
                   </div>
                 ))}
               </div>
@@ -454,7 +596,7 @@ export default function IncomeExpensePage() {
                     className="hover:bg-white/2"
                   >
                     <td className={`${td} whitespace-nowrap text-slate-400`}>
-                      {t.date}
+                      {formatDate(t.date)}
                     </td>
                     <td className={td}>
                       <Badge tone={t.type === "Income" ? "green" : "orange"}>
@@ -464,9 +606,9 @@ export default function IncomeExpensePage() {
                     <td className={`${td} text-slate-300`}>{t.category}</td>
                     <td className={`${td} font-medium`}>{t.description}</td>
                     <td className={`${td} whitespace-nowrap text-right text-slate-300`}>
-                      {t.amount}
+                      {money(t.amount)}
                     </td>
-                    <td className={`${td} text-slate-400`}>{t.method}</td>
+                    <td className={`${td} text-slate-400`}>{t.method || "-"}</td>
                   </motion.tr>
                 ))}
               </tbody>
@@ -475,7 +617,9 @@ export default function IncomeExpensePage() {
 
           {/* Pagination */}
           <div className="mt-4 flex flex-col items-center justify-between gap-3 text-[11px] text-slate-400 sm:flex-row">
-            <span>Showing 1-{list.length} of 56</span>
+            <span>
+              Showing 1-{list.length} of {BASE_TOTAL_ROWS + added.length}
+            </span>
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -509,19 +653,35 @@ export default function IncomeExpensePage() {
         </Card>
       </motion.div>
 
-      {/* Add Income modal (opens from the "Add Income" button) */}
+      {/* Add Income drawer (opens from the "Add Income" button) */}
       <AddIncomeEntryModal
         open={incomeOpen}
         onClose={() => setIncomeOpen(false)}
         onSave={handleSaveIncome}
       />
 
-      {/* Add Expense modal (opens from the "Add Expense" button) */}
+      {/* Add Expense drawer (opens from the "Add Expense" button) */}
       <AddExpenseEntryModal
         open={expenseOpen}
         onClose={() => setExpenseOpen(false)}
         onSave={handleSaveExpense}
       />
+
+      {/* Success message */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="fixed right-4 top-20 z-80 flex max-w-[90vw] items-center gap-2 rounded-lg border border-emerald-500/30 bg-[#10131A] px-4 py-3 text-xs text-emerald-400 shadow-xl"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

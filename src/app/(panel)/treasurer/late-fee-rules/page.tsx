@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { AnimatePresence, motion, type Variants } from 'framer-motion'
+import { motion, type Variants } from 'framer-motion'
 import {
-  Plus, MoreVertical, ChevronLeft, ChevronRight,
+  Plus, ChevronLeft, ChevronRight, Power, Trash2,
 } from 'lucide-react'
 import { Card, Badge } from '@/Components/ui'
 import AddLateFeeRuleModal, { type AddLateFeeRulePayload } from '@/Components/AddLateFeeRuleModal' // adjust the path to your folder
@@ -52,6 +52,9 @@ const initialRules: Rule[] = [
 const th = 'bg-white/4 px-2 py-2 font-medium first:rounded-l-md last:rounded-r-md'
 const td = 'border-t border-[#272D39] px-2 py-2.5'
 
+// Small icon button used in the Actions column
+const iconBtn = 'cursor-pointer rounded-md p-1.5 transition active:scale-90'
+
 /* ---------- Small helpers ---------- */
 
 // 2025-04-01 -> 01 Apr 2025
@@ -71,7 +74,6 @@ function formatRate(r: Rule) {
 /* ---------- Page ---------- */
 export default function LateFeeRulesPage() {
   const [rules, setRules] = useState<Rule[]>(initialRules)
-  const [menuId, setMenuId] = useState<number | null>(null)
   const [page, setPage] = useState(1)
   // Controls the Create Late Fee Rule drawer (open / closed)
   const [addOpen, setAddOpen] = useState(false)
@@ -79,11 +81,9 @@ export default function LateFeeRulesPage() {
   // Row actions
   const toggleActive = (id: number) => {
     setRules((prev) => prev.map((r) => (r.id === id ? { ...r, active: !r.active } : r)))
-    setMenuId(null)
   }
   const remove = (id: number) => {
     setRules((prev) => prev.filter((r) => r.id !== id))
-    setMenuId(null)
   }
 
   // Called when the drawer form is saved: adds the new rule at the top of the table
@@ -177,43 +177,36 @@ export default function LateFeeRulesPage() {
                     <td className={td}>
                       <Badge tone={r.active ? 'green' : 'gray'}>{r.active ? 'Active' : 'Inactive'}</Badge>
                     </td>
-                    <td className={`${td} relative text-right`}>
-                      <button
-                        type="button"
-                        aria-label="Actions"
-                        onClick={() => setMenuId(menuId === r.id ? null : r.id)}
-                        className="cursor-pointer rounded-md p-1 text-slate-400 hover:bg-white/5"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
 
-                      {/* Row action menu */}
-                      <AnimatePresence>
-                        {menuId === r.id && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -6, scale: 0.97 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                            transition={{ duration: 0.2, ease: EASE }}
-                            className="absolute right-3 top-10 z-20 w-36 overflow-hidden rounded-lg border border-[#272D39] bg-[#10131A] text-left shadow-xl"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => toggleActive(r.id)}
-                              className="block w-full cursor-pointer px-3 py-2 text-[11px] text-slate-300 hover:bg-white/5"
-                            >
-                              {r.active ? 'Mark Inactive' : 'Mark Active'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => remove(r.id)}
-                              className="block w-full cursor-pointer px-3 py-2 text-[11px] text-red-400 hover:bg-white/5"
-                            >
-                              Delete
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                    {/* Actions: icons directly in the row (no 3-dot menu) */}
+                    <td className={`${td} text-right`}>
+                      <div className="flex items-center justify-end gap-0.5">
+                        {/* Mark Active / Mark Inactive */}
+                        <button
+                          type="button"
+                          title={r.active ? 'Mark Inactive' : 'Mark Active'}
+                          aria-label={r.active ? 'Mark Inactive' : 'Mark Active'}
+                          onClick={() => toggleActive(r.id)}
+                          className={`${iconBtn} ${
+                            r.active
+                              ? 'text-emerald-400 hover:bg-emerald-500/10'
+                              : 'text-slate-500 hover:bg-white/5 hover:text-white'
+                          }`}
+                        >
+                          <Power className="h-4 w-4" />
+                        </button>
+
+                        {/* Delete */}
+                        <button
+                          type="button"
+                          title="Delete"
+                          aria-label="Delete"
+                          onClick={() => remove(r.id)}
+                          className={`${iconBtn} text-red-400 hover:bg-red-500/10`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </motion.tr>
                 ))}

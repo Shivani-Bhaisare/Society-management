@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { motion, type Variants } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   Wallet,
   AlertCircle,
@@ -11,6 +11,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  X,
+  CheckCircle2,
 } from "lucide-react";
 import { Card, Badge } from "@/Components/ui";
 
@@ -85,7 +87,7 @@ type Receivable = {
   status: Status;
 };
 
-const receivables: Receivable[] = [
+const initialReceivables: Receivable[] = [
   { flat: "A-101", wing: "A", resident: "Rakesh Sharma", billNo: "MB-0001", billAmount: "₹ 3,700", paidAmount: "₹ 2,000", balanceDue: "₹ 1,700", dueDate: "10 Nov 2025", status: "Overdue" },
   { flat: "A-102", wing: "A", resident: "Priya Mehta", billNo: "MB-0002", billAmount: "₹ 3,200", paidAmount: "₹ 3,200", balanceDue: "₹ 0", dueDate: "10 Nov 2025", status: "Paid" },
   { flat: "B-201", wing: "B", resident: "Sandeep Kumar", billNo: "MB-0003", billAmount: "₹ 4,500", paidAmount: "₹ 2,000", balanceDue: "₹ 2,500", dueDate: "10 Nov 2025", status: "Overdue" },
@@ -95,9 +97,21 @@ const receivables: Receivable[] = [
 
 const wingOptions = ["All Wings", "A", "B", "C"];
 const statusOptions = ["All Status", "Overdue", "Paid", "Partial"];
+const paymentModes = ["Cash", "UPI", "Cheque", "Bank Transfer"];
 
 const toneFor = (s: Status) =>
   s === "Paid" ? "green" : s === "Overdue" ? "red" : "orange";
+
+/* ---------- Money helpers ---------- */
+
+// "₹ 3,700" -> 3700
+const toNumber = (v: string) => Number(v.replace(/[^\d.]/g, "")) || 0;
+
+// 3700 -> "₹ 3,700" (Indian number format)
+const toMoney = (n: number) => `₹ ${n.toLocaleString("en-IN")}`;
+
+// Today's date as YYYY-MM-DD (for the date input)
+const todayISO = () => new Date().toISOString().slice(0, 10);
 
 /* ---------- Shared styles (same as Residents) ---------- */
 
@@ -107,11 +121,203 @@ const td = "border-t border-[#272D39] px-2 py-2.5";
 const field =
   "w-full rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60";
 
+/* ---------- Collect Payment popup ---------- */
+
+type CollectModalProps = {
+  record: Receivable;
+  onClose: () => void;
+  onSubmit: (amount: number) => void;
+};
+
+function CollectModal({ record, onClose, onSubmit }: CollectModalProps) {
+  const balance = toNumber(record.balanceDue);
+
+  const [amount, setAmount] = useState(String(balance));
+  const [mode, setMode] = useState(paymentModes[0]);
+  const [date, setDate] = useState(todayISO());
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const value = Number(amount);
+
+    if (!value || value <= 0) {
+      setError("Please enter a valid amount.");
+      return;
+    }
+    if (value > balance) {
+      setError(`Amount cannot be more than the balance due (${toMoney(balance)}).`);
+      return;
+    }
+    onSubmit(value);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="w-full max-w-md rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold">Collect Payment</h2>
+            <p className="text-[11px] text-slate-400">
+              {record.flat} · {record.resident}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Bill summary */}
+        <div className="mt-4 grid grid-cols-3 gap-2 rounded-lg border border-[#272D39] bg-white/3 p-3 text-[11px]">
+          <div>
+            <p className="text-slate-400">Bill No.</p>
+            <p className="mt-0.5 font-semibold">{record.billNo}</p>
+          </div>
+          <div>
+            <p className="text-slate-400">Bill Amount</p>
+            <p className="mt-0.5 font-semibold">{record.billAmount}</p>
+          </div>
+          <div>
+            <p className="text-slate-400">Balance Due</p>
+            <p className="mt-0.5 font-semibold text-red-400">
+              {record.balanceDue}
+            </p>
+          </div>
+        </div>
+
+        {/* Form fields */}
+        <div className="mt-4 flex flex-col gap-3">
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Amount (₹)
+            <input
+              type="number"
+              min={1}
+              max={balance}
+              value={amount}
+              onChange={(e) => {
+                setAmount(e.target.value);
+                setError("");
+              }}
+              className={field}
+              autoFocus
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Payment Mode
+              <div className="relative">
+                <select
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value)}
+                  className={`${field} cursor-pointer appearance-none pr-8`}
+                >
+                  {paymentModes.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+              </div>
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Payment Date
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className={`${field} scheme-dark`}
+              />
+            </label>
+          </div>
+
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Reference / Note (optional)
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Cheque no., UPI ref, remark..."
+              className={field}
+            />
+          </label>
+
+          {error && <p className="text-[11px] text-red-400">{error}</p>}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="cursor-pointer rounded-lg bg-linear-to-r from-[#6C63FF] to-[#4DA3FF] px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90 active:scale-95"
+          >
+            Collect Payment
+          </button>
+        </div>
+      </motion.form>
+    </motion.div>
+  );
+}
+
 /* ---------- Page ---------- */
 export default function AccountsReceivablePage() {
+  const [receivables, setReceivables] = useState<Receivable[]>(initialReceivables);
   const [wing, setWing] = useState("All Wings");
   const [status, setStatus] = useState("All Status");
   const [q, setQ] = useState("");
+
+  // Row currently open in the Collect popup (null = popup closed)
+  const [selected, setSelected] = useState<Receivable | null>(null);
+  // Small success message after a payment is collected
+  const [toast, setToast] = useState("");
+
+  // Hide the success message after 3 seconds
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   // Filter rows by wing, status and search text
   const list = useMemo(() => {
@@ -122,7 +328,31 @@ export default function AccountsReceivablePage() {
         (status === "All Status" || r.status === status) &&
         (!s || `${r.flat} ${r.resident} ${r.billNo}`.toLowerCase().includes(s)),
     );
-  }, [wing, status, q]);
+  }, [receivables, wing, status, q]);
+
+  // Saves the payment: updates paid amount, balance due and status of that bill
+  const collectPayment = (amount: number) => {
+    if (!selected) return;
+
+    setReceivables((prev) =>
+      prev.map((r) => {
+        if (r.billNo !== selected.billNo) return r;
+
+        const paid = toNumber(r.paidAmount) + amount;
+        const balance = toNumber(r.billAmount) - paid;
+
+        return {
+          ...r,
+          paidAmount: toMoney(paid),
+          balanceDue: toMoney(balance),
+          status: balance <= 0 ? "Paid" : "Partial",
+        };
+      }),
+    );
+
+    setToast(`${toMoney(amount)} collected from ${selected.resident} (${selected.flat})`);
+    setSelected(null);
+  };
 
   return (
     <div className="mx-auto flex w-full max-w-350 flex-col gap-4">
@@ -271,7 +501,9 @@ export default function AccountsReceivablePage() {
                     </td>
                     <td
                       className={`${td} whitespace-nowrap font-medium ${
-                        r.balanceDue === "₹ 0" ? "text-slate-400" : "text-red-400"
+                        toNumber(r.balanceDue) === 0
+                          ? "text-slate-400"
+                          : "text-red-400"
                       }`}
                     >
                       {r.balanceDue}
@@ -285,7 +517,9 @@ export default function AccountsReceivablePage() {
                     <td className={`${td} text-right`}>
                       <button
                         type="button"
-                        className="cursor-pointer rounded-md bg-linear-to-r from-[#6C63FF] to-[#4DA3FF] px-3 py-1 text-[10px] font-semibold text-white transition hover:opacity-90 active:scale-95"
+                        onClick={() => setSelected(r)}
+                        disabled={toNumber(r.balanceDue) === 0}
+                        className="cursor-pointer rounded-md bg-linear-to-r from-[#6C63FF] to-[#4DA3FF] px-3 py-1 text-[10px] font-semibold text-white transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:opacity-40 disabled:active:scale-100"
                       >
                         Collect
                       </button>
@@ -342,6 +576,34 @@ export default function AccountsReceivablePage() {
           </div>
         </Card>
       </motion.div>
+
+      {/* Collect Payment popup */}
+      <AnimatePresence>
+        {selected && (
+          <CollectModal
+            key={selected.billNo}
+            record={selected}
+            onClose={() => setSelected(null)}
+            onSubmit={collectPayment}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Success message */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="fixed right-4 top-20 z-[80] flex max-w-[90vw] items-center gap-2 rounded-lg border border-emerald-500/30 bg-[#10131A] px-4 py-3 text-xs text-emerald-400 shadow-xl"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

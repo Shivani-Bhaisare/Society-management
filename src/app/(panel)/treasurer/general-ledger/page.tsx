@@ -96,6 +96,41 @@ const accountOptions = [
   "Reserve Fund",
 ];
 
+/* ---------- Export helpers ---------- */
+
+// Column headings used in both the Excel (CSV) file and the PDF report
+const EXPORT_HEADERS = [
+  "Date",
+  "Voucher No.",
+  "Account",
+  "Description",
+  "Debit",
+  "Credit",
+  "Balance",
+];
+
+// Turns one entry into a row of text values (same order as EXPORT_HEADERS)
+const toRow = (e: Entry) => [
+  e.date,
+  e.voucher,
+  e.account,
+  e.description,
+  e.debit,
+  e.credit,
+  e.balance,
+];
+
+// CSV: wrap every value in quotes (values like "3,00,000" contain commas)
+const csvCell = (v: string) => `"${v.replace(/"/g, '""')}"`;
+
+// HTML: escape special characters so the PDF page never breaks
+const esc = (v: string) =>
+  v
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
 /* ---------- Shared styles (same as Residents) ---------- */
 
 const th =
@@ -121,6 +156,105 @@ export default function GeneralLedgerPage() {
     );
   }, [account, q]);
 
+  /* ----- Export Excel: downloads the visible rows as a .csv file (opens in Excel) ----- */
+  const exportExcel = () => {
+    if (list.length === 0) return;
+
+    const lines = [EXPORT_HEADERS, ...list.map(toRow)].map((row) =>
+      row.map(csvCell).join(","),
+    );
+
+    // "\uFEFF" (BOM) makes Excel read special characters correctly
+    const blob = new Blob(["\uFEFF" + lines.join("\r\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `general-ledger-${year}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  /* ----- Export PDF: opens a clean report in the print dialog (choose "Save as PDF") ----- */
+  const exportPDF = () => {
+    if (list.length === 0) return;
+
+    const rowsHtml = list
+      .map((e) => {
+        const r = toRow(e);
+        return `<tr>${r
+          .map((v, i) => `<td class="${i >= 4 ? "num" : ""}">${esc(v)}</td>`)
+          .join("")}</tr>`;
+      })
+      .join("");
+
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>General Ledger ${esc(year)}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111; padding: 24px; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    .meta { font-size: 12px; color: #555; margin: 0 0 16px; line-height: 1.6; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+    th { background: #f1f1f5; }
+    .num { text-align: right; }
+    th.num { text-align: right; }
+    @page { margin: 12mm; }
+  </style>
+</head>
+<body>
+  <h1>General Ledger</h1>
+  <p class="meta">
+    Financial Year: ${esc(year)}<br />
+    Period: ${esc(range)}<br />
+    Account: ${esc(account)}<br />
+    Total entries: ${list.length}
+  </p>
+  <table>
+    <thead>
+      <tr>${EXPORT_HEADERS.map(
+        (h, i) => `<th class="${i >= 4 ? "num" : ""}">${esc(h)}</th>`,
+      ).join("")}</tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+</body>
+</html>`;
+
+    // Hidden iframe (no popup blocker problem)
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText =
+      "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+    document.body.appendChild(iframe);
+
+    const win = iframe.contentWindow;
+    const doc = win?.document;
+    if (!win || !doc) {
+      iframe.remove();
+      return;
+    }
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    win.onafterprint = () => iframe.remove();
+    setTimeout(() => {
+      win.focus();
+      win.print();
+    }, 250);
+    // Safety cleanup if the browser never fires "afterprint"
+    setTimeout(() => iframe.remove(), 60000);
+  };
+
   return (
     <div className="mx-auto flex w-full max-w-350 flex-col gap-4">
       {/* Heading */}
@@ -138,16 +272,18 @@ export default function GeneralLedgerPage() {
           </p>
         </motion.div>
 
-        {/* Export buttons (connect your own actions here later) */}
+        {/* Export buttons */}
         <motion.div variants={item} className="flex gap-2">
           <button
             type="button"
+            onClick={exportExcel}
             className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#272D39] px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
           >
             <Download className="h-3.5 w-3.5" /> Export Excel
           </button>
           <button
             type="button"
+            onClick={exportPDF}
             className="flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-linear-to-r from-[#6C63FF] to-[#4DA3FF] px-4 py-2.5 text-xs font-semibold text-white transition hover:opacity-90 active:scale-95"
           >
             <FileText className="h-3.5 w-3.5" /> Export PDF

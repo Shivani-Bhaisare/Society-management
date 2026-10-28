@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { motion, type Variants } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   FileText,
   Clock,
@@ -9,13 +9,16 @@ import {
   Wallet,
   Plus,
   Search,
-  MoreVertical,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  Eye,
+  Pencil,
+  BadgeCheck,
+  Trash2,
+  X,
 } from "lucide-react";
 import { Card, Badge } from "@/Components/ui";
-// CHANGED: drawer import (router import removed, not needed anymore)
 import AddVendorBillModal, { type AddVendorBillPayload } from "@/Components/AddVendorBillModal";
 
 /* ---------- Animation ---------- */
@@ -75,11 +78,10 @@ const stats = [
   },
 ];
 
-// CHANGED: "Draft" added so drafts saved from the drawer can show in the table
 type Status = "Pending" | "Approved" | "Under Review" | "Paid" | "Draft";
 
 type VendorBill = {
-  id: number; // CHANGED: unique id so new rows never share a key
+  id: number;
   invoiceNo: string;
   vendor: string;
   category: string;
@@ -97,12 +99,23 @@ const initialBills: VendorBill[] = [
 
 const statusOptions = ["All Status", "Pending", "Approved", "Under Review", "Paid", "Draft"];
 
+// Status choices inside the Edit popup (without "All Status")
+const editStatusOptions: Status[] = ["Pending", "Approved", "Under Review", "Paid", "Draft"];
+
 const toneFor = (s: Status) =>
   s === "Paid" || s === "Approved"
     ? "green"
     : s === "Pending"
       ? "orange"
       : "blue";
+
+/* ---------- Money helpers ---------- */
+
+// "₹ 12,000" -> 12000
+const toNumber = (v: string) => Number(v.replace(/[^\d.]/g, "")) || 0;
+
+// 12000 -> "₹ 12,000" (Indian number format)
+const toMoney = (n: number) => `₹ ${n.toLocaleString("en-IN")}`;
 
 /* ---------- Shared styles (same as Residents) ---------- */
 
@@ -112,12 +125,390 @@ const td = "border-t border-[#272D39] px-2 py-2.5";
 const field =
   "w-full rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60";
 
+// Small icon button used in the Actions column
+const iconBtn =
+  "cursor-pointer rounded-md p-1.5 transition active:scale-90";
+
+/* ---------- View Details popup ---------- */
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-[#272D39] py-2 text-[11px] first:border-t-0">
+      <span className="text-slate-400">{label}</span>
+      <span className="text-right font-medium text-slate-200">{value}</span>
+    </div>
+  );
+}
+
+type ViewBillModalProps = {
+  record: VendorBill;
+  onClose: () => void;
+};
+
+function ViewBillModal({ record, onClose }: ViewBillModalProps) {
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-4 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold">Invoice Details</h2>
+            <p className="truncate text-[11px] text-slate-400">
+              {record.vendor} · {record.invoiceNo}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Status */}
+        <div className="mt-3 flex items-center justify-between rounded-lg border border-[#272D39] bg-white/3 px-3 py-2">
+          <span className="text-[11px] text-slate-400">Status</span>
+          <Badge tone={toneFor(record.status)}>{record.status}</Badge>
+        </div>
+
+        {/* Amount */}
+        <div className="mt-2 rounded-lg border border-[#272D39] bg-white/3 px-3 py-2.5">
+          <p className="text-[11px] text-slate-400">Invoice Amount</p>
+          <p className="mt-0.5 text-lg font-bold">{record.amount}</p>
+        </div>
+
+        {/* Invoice details */}
+        <div className="mt-2 rounded-lg border border-[#272D39] bg-white/3 px-3">
+          <DetailRow label="Invoice No." value={record.invoiceNo} />
+          <DetailRow label="Vendor" value={record.vendor} />
+          <DetailRow label="Category" value={record.category} />
+        </div>
+
+        {/* Actions */}
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Close
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ---------- Edit Vendor Bill popup ---------- */
+
+type EditBillModalProps = {
+  record: VendorBill;
+  onClose: () => void;
+  onSubmit: (updated: VendorBill) => void;
+};
+
+function EditBillModal({ record, onClose, onSubmit }: EditBillModalProps) {
+  const [invoiceNo, setInvoiceNo] = useState(record.invoiceNo);
+  const [vendor, setVendor] = useState(record.vendor);
+  const [category, setCategory] = useState(record.category === "-" ? "" : record.category);
+  const [amount, setAmount] = useState(String(toNumber(record.amount)));
+  const [status, setStatus] = useState<Status>(record.status);
+  const [error, setError] = useState("");
+
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const num = Number(amount);
+
+    if (!invoiceNo.trim()) {
+      setError("Please enter the invoice number.");
+      return;
+    }
+    if (!vendor.trim()) {
+      setError("Please enter the vendor name.");
+      return;
+    }
+    if (!num || num <= 0) {
+      setError("Please enter a valid amount.");
+      return;
+    }
+
+    onSubmit({
+      ...record,
+      invoiceNo: invoiceNo.trim(),
+      vendor: vendor.trim(),
+      category: category.trim() || "-",
+      amount: toMoney(num),
+      status,
+    });
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold">Edit Vendor Bill</h2>
+            <p className="text-[11px] text-slate-400">
+              Update the details of {record.invoiceNo}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Form fields */}
+        <div className="mt-4 flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Invoice No.
+              <input
+                value={invoiceNo}
+                onChange={(e) => {
+                  setInvoiceNo(e.target.value);
+                  setError("");
+                }}
+                className={field}
+                autoFocus
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Amount (₹)
+              <input
+                type="number"
+                min={0}
+                value={amount}
+                onChange={(e) => {
+                  setAmount(e.target.value);
+                  setError("");
+                }}
+                className={field}
+              />
+            </label>
+          </div>
+
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Vendor
+            <input
+              value={vendor}
+              onChange={(e) => {
+                setVendor(e.target.value);
+                setError("");
+              }}
+              className={field}
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Category
+              <input
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="e.g. Plumbing"
+                className={field}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Status
+              <div className="relative">
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as Status)}
+                  className={`${field} cursor-pointer appearance-none pr-8`}
+                >
+                  {editStatusOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+              </div>
+            </label>
+          </div>
+
+          {error && <p className="text-[11px] text-red-400">{error}</p>}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="cursor-pointer rounded-lg bg-linear-to-r from-[#6C63FF] to-[#4DA3FF] px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90 active:scale-95"
+          >
+            Save Changes
+          </button>
+        </div>
+      </motion.form>
+    </motion.div>
+  );
+}
+
+/* ---------- Delete confirm popup ---------- */
+
+type DeleteConfirmProps = {
+  record: VendorBill;
+  onClose: () => void;
+  onConfirm: () => void;
+};
+
+function DeleteConfirm({ record, onClose, onConfirm }: DeleteConfirmProps) {
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="w-full max-w-sm rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/15 text-red-400">
+            <Trash2 className="h-4 w-4" />
+          </span>
+          <div>
+            <h2 className="text-base font-bold">Delete Vendor Bill</h2>
+            <p className="text-[11px] text-slate-400">
+              This action cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        <p className="mt-4 text-xs text-slate-300">
+          Are you sure you want to delete invoice{" "}
+          <span className="font-semibold text-white">{record.invoiceNo}</span>{" "}
+          of {record.vendor}?
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="cursor-pointer rounded-lg bg-red-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-red-600 active:scale-95"
+          >
+            Delete
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 /* ---------- Page ---------- */
 export default function VendorBillsPage() {
-  const [bills, setBills] = useState<VendorBill[]>(initialBills); // CHANGED: bills are now state
-  const [open, setOpen] = useState(false); // CHANGED: drawer open / close
+  const [bills, setBills] = useState<VendorBill[]>(initialBills);
+  const [open, setOpen] = useState(false); // Add Vendor Bill drawer open / close
   const [status, setStatus] = useState(statusOptions[0]);
   const [q, setQ] = useState("");
+
+  // Bill open in the View / Edit / Delete popup (null = closed)
+  const [viewing, setViewing] = useState<VendorBill | null>(null);
+  const [editing, setEditing] = useState<VendorBill | null>(null);
+  const [deleting, setDeleting] = useState<VendorBill | null>(null);
+  // Small success message after an action
+  const [toast, setToast] = useState("");
+
+  // Hide the success message after 3 seconds
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   // Filter rows by status and search text
   const list = useMemo(() => {
@@ -129,7 +520,7 @@ export default function VendorBillsPage() {
     );
   }, [bills, status, q]);
 
-  // CHANGED: add the saved bill to the table (replace with an API call later)
+  // Add the saved bill to the table (replace with an API call later)
   const handleSave = (data: AddVendorBillPayload) => {
     setBills((prev) => [
       ...prev,
@@ -143,6 +534,27 @@ export default function VendorBillsPage() {
       },
     ]);
     setStatus("All Status");
+  };
+
+  // Edit: save the changed details (replace with an API call later)
+  const handleEdit = (updated: VendorBill) => {
+    setBills((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+    setToast(`${updated.invoiceNo} updated`);
+    setEditing(null);
+  };
+
+  // Approve / Mark as Paid: changes only the status (replace with an API call later)
+  const changeStatus = (b: VendorBill, next: Status) => {
+    setBills((prev) => prev.map((x) => (x.id === b.id ? { ...x, status: next } : x)));
+    setToast(`${b.invoiceNo} is now ${next}`);
+  };
+
+  // Delete: removes the bill (replace with an API call later)
+  const handleDelete = () => {
+    if (!deleting) return;
+    setBills((prev) => prev.filter((b) => b.id !== deleting.id));
+    setToast(`${deleting.invoiceNo} deleted`);
+    setDeleting(null);
   };
 
   return (
@@ -166,7 +578,7 @@ export default function VendorBillsPage() {
         <motion.div variants={item}>
           <button
             type="button"
-            onClick={() => setOpen(true)} // CHANGED: opens the drawer
+            onClick={() => setOpen(true)}
             className="flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-linear-to-r from-[#6C63FF] to-[#4DA3FF] px-4 py-2.5 text-xs font-semibold text-white transition hover:opacity-90 active:scale-95"
           >
             <Plus className="h-3.5 w-3.5" /> Add Vendor Bill
@@ -266,7 +678,7 @@ export default function VendorBillsPage() {
               <tbody>
                 {list.map((b, i) => (
                   <motion.tr
-                    key={b.id} // CHANGED: unique id key
+                    key={b.id}
                     initial={{ opacity: 0, y: 10 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={VIEWPORT}
@@ -282,14 +694,71 @@ export default function VendorBillsPage() {
                     <td className={td}>
                       <Badge tone={toneFor(b.status)}>{b.status}</Badge>
                     </td>
+
+                    {/* Actions: icons directly in the row (no 3-dot menu) */}
                     <td className={`${td} text-right`}>
-                      <button
-                        type="button"
-                        aria-label="Actions"
-                        className="cursor-pointer rounded-md p-1 text-slate-400 hover:bg-white/5"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-0.5">
+                        {/* View Details */}
+                        <button
+                          type="button"
+                          title="View Details"
+                          aria-label="View Details"
+                          onClick={() => setViewing(b)}
+                          className={`${iconBtn} text-slate-400 hover:bg-white/5 hover:text-white`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+
+                        {/* Edit */}
+                        <button
+                          type="button"
+                          title="Edit"
+                          aria-label="Edit"
+                          onClick={() => setEditing(b)}
+                          className={`${iconBtn} text-slate-400 hover:bg-white/5 hover:text-[#A29CFF]`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+
+                        {/* Approve: only for bills that are not approved / paid yet */}
+                        {(b.status === "Pending" ||
+                          b.status === "Under Review" ||
+                          b.status === "Draft") && (
+                          <button
+                            type="button"
+                            title="Approve"
+                            aria-label="Approve"
+                            onClick={() => changeStatus(b, "Approved")}
+                            className={`${iconBtn} text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-400`}
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                          </button>
+                        )}
+
+                        {/* Mark as Paid: only for approved bills */}
+                        {b.status === "Approved" && (
+                          <button
+                            type="button"
+                            title="Mark as Paid"
+                            aria-label="Mark as Paid"
+                            onClick={() => changeStatus(b, "Paid")}
+                            className={`${iconBtn} text-slate-400 hover:bg-[#8B5CF6]/10 hover:text-[#8B5CF6]`}
+                          >
+                            <BadgeCheck className="h-4 w-4" />
+                          </button>
+                        )}
+
+                        {/* Delete */}
+                        <button
+                          type="button"
+                          title="Delete"
+                          aria-label="Delete"
+                          onClick={() => setDeleting(b)}
+                          className={`${iconBtn} text-red-400 hover:bg-red-500/10`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </motion.tr>
                 ))}
@@ -344,12 +813,63 @@ export default function VendorBillsPage() {
         </Card>
       </motion.div>
 
-      {/* CHANGED: Add Vendor Bill drawer */}
+      {/* Add Vendor Bill drawer */}
       <AddVendorBillModal
         open={open}
         onClose={() => setOpen(false)}
         onSave={handleSave}
       />
+
+      {/* View Details popup */}
+      <AnimatePresence>
+        {viewing && (
+          <ViewBillModal
+            key={viewing.id}
+            record={viewing}
+            onClose={() => setViewing(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Edit popup */}
+      <AnimatePresence>
+        {editing && (
+          <EditBillModal
+            key={editing.id}
+            record={editing}
+            onClose={() => setEditing(null)}
+            onSubmit={handleEdit}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete confirm popup */}
+      <AnimatePresence>
+        {deleting && (
+          <DeleteConfirm
+            key={deleting.id}
+            record={deleting}
+            onClose={() => setDeleting(null)}
+            onConfirm={handleDelete}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Success message */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="fixed right-4 top-20 z-80 flex max-w-[90vw] items-center gap-2 rounded-lg border border-emerald-500/30 bg-[#10131A] px-4 py-3 text-xs text-emerald-400 shadow-xl"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

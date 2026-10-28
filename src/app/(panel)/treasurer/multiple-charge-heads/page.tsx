@@ -1,16 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import { motion, type Variants } from "framer-motion";
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   ListChecks,
   CheckCircle2,
   Lock,
   SlidersHorizontal,
   Plus,
-  MoreVertical,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  Pencil,
+  Power,
+  Trash2,
+  X,
 } from "lucide-react";
 import { Card, Badge } from "@/Components/ui";
 import AddChargeHeadModal, {
@@ -57,11 +61,21 @@ const initialCharges: Charge[] = [
   { id: 5, name: "Water Charges", method: "Per Sq. Ft.", value: 10, frequency: "Monthly", status: "Active" },
 ];
 
+// Options used in the Edit popup
+const methodOptions: ChargeMethod[] = ["Fixed", "Percentage", "Per Sq. Ft."];
+const frequencyOptions = ["Monthly", "Quarterly", "Half Yearly", "Yearly"];
+
 /* ---------- Shared styles (same as Residents) ---------- */
 
 const th =
   "bg-white/4 px-2 py-2 font-medium first:rounded-l-md last:rounded-r-md";
 const td = "border-t border-[#272D39] px-2 py-2.5";
+const field =
+  "w-full rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60";
+
+// Small icon button used in the Actions column
+const iconBtn =
+  "cursor-pointer rounded-md p-1.5 transition active:scale-90";
 
 /* ---------- Small helpers ---------- */
 
@@ -72,10 +86,301 @@ function formatValue(c: Charge) {
   return `₹ ${c.value.toLocaleString("en-IN")}`;
 }
 
+/* ---------- Edit Charge Head popup ---------- */
+
+type EditChargeModalProps = {
+  record: Charge;
+  onClose: () => void;
+  onSubmit: (updated: Charge) => void;
+};
+
+function EditChargeModal({ record, onClose, onSubmit }: EditChargeModalProps) {
+  const [name, setName] = useState(record.name);
+  const [method, setMethod] = useState<ChargeMethod>(record.method);
+  const [value, setValue] = useState(String(record.value));
+  const [frequency, setFrequency] = useState(record.frequency);
+  const [status, setStatus] = useState<Charge["status"]>(record.status);
+  const [error, setError] = useState("");
+
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const num = Number(value);
+
+    if (!name.trim()) {
+      setError("Please enter the charge name.");
+      return;
+    }
+    if (!num || num <= 0) {
+      setError("Please enter a valid amount / rate.");
+      return;
+    }
+    if (method === "Percentage" && num > 100) {
+      setError("Percentage cannot be more than 100.");
+      return;
+    }
+
+    onSubmit({
+      ...record,
+      name: name.trim(),
+      method,
+      value: num,
+      frequency,
+      status,
+    });
+  };
+
+  // Frequency list always contains the current value (even if it is a custom one)
+  const freqList = frequencyOptions.includes(frequency)
+    ? frequencyOptions
+    : [...frequencyOptions, frequency];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="w-full max-w-md rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold">Edit Charge Head</h2>
+            <p className="text-[11px] text-slate-400">
+              Update the details of {record.name}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Form fields */}
+        <div className="mt-4 flex flex-col gap-3">
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Charge Name
+            <input
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setError("");
+              }}
+              className={field}
+              autoFocus
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Calculation Method
+              <div className="relative">
+                <select
+                  value={method}
+                  onChange={(e) => setMethod(e.target.value as ChargeMethod)}
+                  className={`${field} cursor-pointer appearance-none pr-8`}
+                >
+                  {methodOptions.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+              </div>
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              {method === "Percentage" ? "Rate (%)" : "Amount / Rate (₹)"}
+              <input
+                type="number"
+                min={0}
+                value={value}
+                onChange={(e) => {
+                  setValue(e.target.value);
+                  setError("");
+                }}
+                className={field}
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Frequency
+              <div className="relative">
+                <select
+                  value={frequency}
+                  onChange={(e) => setFrequency(e.target.value)}
+                  className={`${field} cursor-pointer appearance-none pr-8`}
+                >
+                  {freqList.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+              </div>
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Status
+              <div className="relative">
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as Charge["status"])}
+                  className={`${field} cursor-pointer appearance-none pr-8`}
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+              </div>
+            </label>
+          </div>
+
+          {error && <p className="text-[11px] text-red-400">{error}</p>}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="cursor-pointer rounded-lg bg-linear-to-r from-[#6C63FF] to-[#4DA3FF] px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90 active:scale-95"
+          >
+            Save Changes
+          </button>
+        </div>
+      </motion.form>
+    </motion.div>
+  );
+}
+
+/* ---------- Delete confirm popup ---------- */
+
+type DeleteConfirmProps = {
+  record: Charge;
+  onClose: () => void;
+  onConfirm: () => void;
+};
+
+function DeleteConfirm({ record, onClose, onConfirm }: DeleteConfirmProps) {
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="w-full max-w-sm rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/15 text-red-400">
+            <Trash2 className="h-4 w-4" />
+          </span>
+          <div>
+            <h2 className="text-base font-bold">Delete Charge Head</h2>
+            <p className="text-[11px] text-slate-400">
+              This action cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        <p className="mt-4 text-xs text-slate-300">
+          Are you sure you want to delete{" "}
+          <span className="font-semibold text-white">{record.name}</span>?
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="cursor-pointer rounded-lg bg-red-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-red-600 active:scale-95"
+          >
+            Delete
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 /* ---------- Page ---------- */
 export default function MultipleChargeHeadsPage() {
   const [charges, setCharges] = useState<Charge[]>(initialCharges);
   const [open, setOpen] = useState(false);
+
+  // Charge head open in the Edit popup / Delete popup (null = closed)
+  const [editing, setEditing] = useState<Charge | null>(null);
+  const [deleting, setDeleting] = useState<Charge | null>(null);
+  // Small success message after an action
+  const [toast, setToast] = useState("");
+
+  // Hide the success message after 3 seconds
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   // Summary numbers are calculated from the list
   const total = charges.length;
@@ -131,6 +436,30 @@ export default function MultipleChargeHeadsPage() {
         status: data.active ? "Active" : "Inactive",
       },
     ]);
+  };
+
+  // Edit: save the changed details (replace with an API call later)
+  const handleEdit = (updated: Charge) => {
+    setCharges((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    setToast(`${updated.name} updated`);
+    setEditing(null);
+  };
+
+  // Activate / Deactivate: flips the status (replace with an API call later)
+  const toggleStatus = (c: Charge) => {
+    const next: Charge["status"] = c.status === "Active" ? "Inactive" : "Active";
+    setCharges((prev) =>
+      prev.map((x) => (x.id === c.id ? { ...x, status: next } : x)),
+    );
+    setToast(`${c.name} is now ${next}`);
+  };
+
+  // Delete: removes the charge head (replace with an API call later)
+  const handleDelete = () => {
+    if (!deleting) return;
+    setCharges((prev) => prev.filter((c) => c.id !== deleting.id));
+    setToast(`${deleting.name} deleted`);
+    setDeleting(null);
   };
 
   return (
@@ -245,17 +574,61 @@ export default function MultipleChargeHeadsPage() {
                         {c.status}
                       </Badge>
                     </td>
+
+                    {/* Actions: icons directly in the row (no 3-dot menu) */}
                     <td className={`${td} text-right`}>
-                      <button
-                        type="button"
-                        aria-label="Actions"
-                        className="cursor-pointer rounded-md p-1 text-slate-400 hover:bg-white/5"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-0.5">
+                        {/* Edit */}
+                        <button
+                          type="button"
+                          title="Edit"
+                          aria-label="Edit"
+                          onClick={() => setEditing(c)}
+                          className={`${iconBtn} text-slate-400 hover:bg-white/5 hover:text-[#A29CFF]`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+
+                        {/* Activate / Deactivate */}
+                        <button
+                          type="button"
+                          title={c.status === "Active" ? "Deactivate" : "Activate"}
+                          aria-label={c.status === "Active" ? "Deactivate" : "Activate"}
+                          onClick={() => toggleStatus(c)}
+                          className={`${iconBtn} ${
+                            c.status === "Active"
+                              ? "text-emerald-400 hover:bg-emerald-500/10"
+                              : "text-slate-500 hover:bg-white/5 hover:text-white"
+                          }`}
+                        >
+                          <Power className="h-4 w-4" />
+                        </button>
+
+                        {/* Delete */}
+                        <button
+                          type="button"
+                          title="Delete"
+                          aria-label="Delete"
+                          onClick={() => setDeleting(c)}
+                          className={`${iconBtn} text-red-400 hover:bg-red-500/10`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </motion.tr>
                 ))}
+
+                {charges.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className={`${td} py-8 text-center text-slate-500`}
+                    >
+                      No charge heads found
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -297,6 +670,46 @@ export default function MultipleChargeHeadsPage() {
         onClose={() => setOpen(false)}
         onSave={handleSave}
       />
+
+      {/* Edit popup */}
+      <AnimatePresence>
+        {editing && (
+          <EditChargeModal
+            key={editing.id}
+            record={editing}
+            onClose={() => setEditing(null)}
+            onSubmit={handleEdit}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete confirm popup */}
+      <AnimatePresence>
+        {deleting && (
+          <DeleteConfirm
+            key={deleting.id}
+            record={deleting}
+            onClose={() => setDeleting(null)}
+            onConfirm={handleDelete}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Success message */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="fixed right-4 top-20 z-80 flex max-w-[90vw] items-center gap-2 rounded-lg border border-emerald-500/30 bg-[#10131A] px-4 py-3 text-xs text-emerald-400 shadow-xl"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
