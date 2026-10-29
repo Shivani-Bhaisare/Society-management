@@ -1,12 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ElementType, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   X, FileText, CalendarDays, ChevronDown, Send, FileType2, BookOpen, Percent, Tag, Clock, CheckCircle2,
 } from 'lucide-react'
+import { buildGenerateTaxReportSchema } from '@/lib/validations/treasurerGenerateTaxReport.schema'
+import { fyRange } from '@/lib/validations/treasurerGenerateReport.schema'
+import { issuesToErrors } from '@/lib/validations/treasurerValidationHelpers'
 
 /* ---------- Config ---------- */
 
@@ -23,6 +26,18 @@ const REPORT_FORMATS = ['PDF', 'Excel', 'CSV']
 const MAX_NOTES = 500
 
 type PeriodType = (typeof PERIOD_TYPES)[number]
+
+// Schema is built once, with the same lists the dropdowns use
+const taxReportSchema = buildGenerateTaxReportSchema({
+  reportTypes: REPORT_TYPES,
+  financialYears: FINANCIAL_YEARS,
+  periodTypes: PERIOD_TYPES,
+  quarters: QUARTERS,
+  chargeHeads: CHARGE_HEADS,
+  taxRates: TAX_RATES,
+  statuses: STATUSES,
+  formats: REPORT_FORMATS,
+})
 
 // Data sent to the page when the report is generated
 export type GenerateTaxReportPayload = {
@@ -60,6 +75,13 @@ const prettyDate = (v: string) =>
 const thisMonth = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+// Default month for a financial year: this month if it is inside the year, otherwise the first month of the year
+const defaultMonth = (fy: string) => {
+  const r = fyRange(fy)
+  const cur = thisMonth()
+  return cur >= r.from.slice(0, 7) && cur <= r.to.slice(0, 7) ? cur : r.from.slice(0, 7)
 }
 
 /* ---------- Styles ---------- */
@@ -176,7 +198,7 @@ function Body({
   const [reportType, setReportType] = useState(REPORT_TYPES[0])
   const [financialYear, setFinancialYear] = useState(FINANCIAL_YEARS[0])
   const [periodType, setPeriodType] = useState<PeriodType>('Monthly')
-  const [month, setMonth] = useState(() => thisMonth())
+  const [month, setMonth] = useState(() => defaultMonth(FINANCIAL_YEARS[0]))
   const [quarter, setQuarter] = useState(QUARTERS[0])
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -209,16 +231,44 @@ function Body({
 
   const clearErr = (k: string) => setErrors((p) => ({ ...p, [k]: '' }))
 
+  // Month and date pickers only allow values inside the chosen financial year
+  const range = useMemo(() => fyRange(financialYear), [financialYear])
+
+  // Changing the financial year also resets the month and the custom dates
+  const onYearChange = (fy: string) => {
+    setFinancialYear(fy)
+    setMonth(defaultMonth(fy))
+    setDateFrom('')
+    setDateTo('')
+    clearErr('financialYear')
+    clearErr('month')
+    clearErr('dateRange')
+  }
+
   /* ----- Validation + submit ----- */
+  // Validate the whole form with the zod schema (all errors are shown together)
   function validate() {
-    const err: Record<string, string> = {}
-    if (periodType === 'Monthly' && !month) err.month = 'Select a month'
-    if (periodType === 'Custom') {
-      if (!dateFrom || !dateTo) err.dateRange = 'Select both dates'
-      else if (dateTo < dateFrom) err.dateRange = 'End date cannot be before start date'
+    const result = taxReportSchema.safeParse({
+      reportType,
+      financialYear,
+      periodType,
+      month,
+      quarter,
+      dateFrom,
+      dateTo,
+      chargeHead,
+      taxRate,
+      status,
+      format,
+      notes,
+    })
+
+    if (!result.success) {
+      setErrors(issuesToErrors(result.error.issues))
+      return false
     }
-    setErrors(err)
-    return Object.keys(err).length === 0
+    setErrors({})
+    return true
   }
 
   function submit() {
@@ -292,20 +342,33 @@ function Body({
         <div className={`mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 text-white sm:px-4 ${noScrollbar}`}>
           <div className="rounded-xl border border-[#272D39] p-3.5">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Field label="Report Type">
-                <IconSelect icon={BookOpen} value={reportType} onChange={setReportType} options={REPORT_TYPES} />
+              <Field label="Report Type" error={errors.reportType}>
+                <IconSelect
+                  icon={BookOpen}
+                  value={reportType}
+                  onChange={(v) => { setReportType(v); clearErr('reportType') }}
+                  options={REPORT_TYPES}
+                  error={!!errors.reportType}
+                />
               </Field>
 
-              <Field label="Financial Year">
-                <IconSelect icon={CalendarDays} value={financialYear} onChange={setFinancialYear} options={FINANCIAL_YEARS} />
+              <Field label="Financial Year" error={errors.financialYear}>
+                <IconSelect
+                  icon={CalendarDays}
+                  value={financialYear}
+                  onChange={onYearChange}
+                  options={FINANCIAL_YEARS}
+                  error={!!errors.financialYear}
+                />
               </Field>
 
-              <Field label="Period Type">
+              <Field label="Period Type" error={errors.periodType}>
                 <IconSelect
                   icon={Clock}
                   value={periodType}
                   onChange={(v) => { setPeriodType(v as PeriodType); setErrors({}) }}
                   options={PERIOD_TYPES}
+                  error={!!errors.periodType}
                 />
               </Field>
 
@@ -317,6 +380,8 @@ function Body({
                     <input
                       type="month"
                       value={month}
+                      min={range.from.slice(0, 7)}
+                      max={range.to.slice(0, 7)}
                       onChange={(e) => { setMonth(e.target.value); clearErr('month') }}
                       className={`${inputCls(true, !!errors.month)} scheme-dark`}
                     />
@@ -325,8 +390,14 @@ function Body({
               )}
 
               {periodType === 'Quarterly' && (
-                <Field label="Quarter">
-                  <IconSelect icon={CalendarDays} value={quarter} onChange={setQuarter} options={QUARTERS} />
+                <Field label="Quarter" error={errors.quarter}>
+                  <IconSelect
+                    icon={CalendarDays}
+                    value={quarter}
+                    onChange={(v) => { setQuarter(v); clearErr('quarter') }}
+                    options={QUARTERS}
+                    error={!!errors.quarter}
+                  />
                 </Field>
               )}
 
@@ -345,7 +416,8 @@ function Body({
                     <DateBox
                       label="From date"
                       value={dateFrom}
-                      max={dateTo || undefined}
+                      min={range.from}
+                      max={dateTo || range.to}
                       onChange={(v) => { setDateFrom(v); clearErr('dateRange') }}
                       error={!!errors.dateRange}
                     />
@@ -353,7 +425,8 @@ function Body({
                     <DateBox
                       label="To date"
                       value={dateTo}
-                      min={dateFrom || undefined}
+                      min={dateFrom || range.from}
+                      max={range.to}
                       onChange={(v) => { setDateTo(v); clearErr('dateRange') }}
                       error={!!errors.dateRange}
                     />
@@ -361,33 +434,57 @@ function Body({
                 </Field>
               )}
 
-              <Field label="Charge Head">
-                <IconSelect icon={Tag} value={chargeHead} onChange={setChargeHead} options={CHARGE_HEADS} />
+              <Field label="Charge Head" error={errors.chargeHead}>
+                <IconSelect
+                  icon={Tag}
+                  value={chargeHead}
+                  onChange={(v) => { setChargeHead(v); clearErr('chargeHead') }}
+                  options={CHARGE_HEADS}
+                  error={!!errors.chargeHead}
+                />
               </Field>
 
-              <Field label="Tax Rate">
-                <IconSelect icon={Percent} value={taxRate} onChange={setTaxRate} options={TAX_RATES} />
+              <Field label="Tax Rate" error={errors.taxRate}>
+                <IconSelect
+                  icon={Percent}
+                  value={taxRate}
+                  onChange={(v) => { setTaxRate(v); clearErr('taxRate') }}
+                  options={TAX_RATES}
+                  error={!!errors.taxRate}
+                />
               </Field>
 
-              <Field label="Status">
-                <IconSelect icon={CheckCircle2} value={status} onChange={setStatus} options={STATUSES} />
+              <Field label="Status" error={errors.status}>
+                <IconSelect
+                  icon={CheckCircle2}
+                  value={status}
+                  onChange={(v) => { setStatus(v); clearErr('status') }}
+                  options={STATUSES}
+                  error={!!errors.status}
+                />
               </Field>
 
-              <Field label="Report Format">
-                <IconSelect icon={FileType2} value={format} onChange={setFormat} options={REPORT_FORMATS} />
+              <Field label="Report Format" error={errors.format}>
+                <IconSelect
+                  icon={FileType2}
+                  value={format}
+                  onChange={(v) => { setFormat(v); clearErr('format') }}
+                  options={REPORT_FORMATS}
+                  error={!!errors.format}
+                />
               </Field>
             </div>
 
             {/* Description / notes */}
             <div className="mt-3">
-              <Field label="Description / Notes" optional>
+              <Field label="Description / Notes" optional error={errors.notes}>
                 <textarea
                   value={notes}
                   maxLength={MAX_NOTES}
-                  onChange={(e) => setNotes(e.target.value)}
+                  onChange={(e) => { setNotes(e.target.value); clearErr('notes') }}
                   rows={4}
                   placeholder="Enter any additional notes or remarks..."
-                  className={`${inputCls()} resize-none`}
+                  className={`${inputCls(false, !!errors.notes)} resize-none`}
                 />
                 <p className="mt-1 text-right text-[9px] text-slate-500">{notes.length}/{MAX_NOTES}</p>
               </Field>

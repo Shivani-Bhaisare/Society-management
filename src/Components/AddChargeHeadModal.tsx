@@ -8,6 +8,17 @@ import {
   X, ListChecks, ChevronDown, Info, ArrowRight, ArrowLeft, Check,
   Tag, Calculator, CalendarDays, Users, Percent, IndianRupee,
 } from 'lucide-react'
+// Options and validation come from the treasurer schema file
+import {
+  FREQUENCIES,
+  APPLICABLE_TO,
+  TAX_OPTIONS,
+  WINGS,
+  FLATS,
+  validateChargeHeadStep,
+  firstInvalidStep,
+  type ChargeHeadValues,
+} from '@/lib/validations/treasurerChargeHead.schema'
 
 /* ---------- Config ---------- */
 
@@ -17,12 +28,6 @@ const CALC_TYPES = [
   { label: 'Percentage', method: 'Percentage' },
   { label: 'Per Sq. Ft.', method: 'Per Sq. Ft.' },
 ] as const
-
-const FREQUENCIES = ['Monthly', 'Quarterly', 'Half Yearly', 'Yearly']
-const APPLICABLE_TO = ['All Flats', 'Selected Wings', 'Selected Flats']
-const TAX_OPTIONS = ['As applicable', 'No Tax', 'GST 18%']
-const WINGS = ['A', 'B', 'C']
-const FLATS = ['A-101', 'A-102', 'B-201', 'B-202', 'C-101']
 
 const STEPS = ['Basic Details', 'Applicable Flats', 'Settings & Review']
 
@@ -85,12 +90,13 @@ function IconInput({
 
 // Select with a left icon and a custom chevron
 function IconSelect({
-  icon: Icon, value, onChange, options,
+  icon: Icon, value, onChange, options, error,
 }: {
   icon: React.ElementType
   value: string
   onChange: (v: string) => void
   options: string[]
+  error?: boolean
 }) {
   return (
     <div className="relative">
@@ -98,7 +104,7 @@ function IconSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`${inputCls(true)} cursor-pointer appearance-none pr-7`}
+        className={`${inputCls(true, error)} cursor-pointer appearance-none pr-7`}
       >
         {options.map((o) => (
           <option key={o} value={o} className="bg-[#10131A] text-white">{o}</option>
@@ -240,19 +246,23 @@ function Body({
   const toggleIn = (list: string[], v: string) =>
     list.includes(v) ? list.filter((x) => x !== v) : [...list, v]
 
-  // Validation for each step
+  // All form values in one object, used by the schema validation
+  const formValues: ChargeHeadValues = {
+    name,
+    code,
+    calc,
+    amount,
+    freq,
+    appliesTo,
+    tax,
+    wings,
+    flats,
+    description,
+  }
+
+  // Validation for each step (uses the treasurer schema)
   function validate(s: number) {
-    const err: Record<string, string> = {}
-    if (s === 1) {
-      if (!name.trim()) err.name = 'Charge name is required'
-      if (!code.trim()) err.code = 'Charge code is required'
-      if (!amountNum) err.amount = 'Amount / rate is required'
-      else if (method === 'Percentage' && amountNum > 100) err.amount = 'Percentage cannot be more than 100'
-    }
-    if (s === 2) {
-      if (appliesTo === 'Selected Wings' && wings.length === 0) err.wings = 'Select at least one wing'
-      if (appliesTo === 'Selected Flats' && flats.length === 0) err.flats = 'Select at least one flat'
-    }
+    const err = validateChargeHeadStep(s, formValues)
     setErrors(err)
     return Object.keys(err).length === 0
   }
@@ -261,9 +271,19 @@ function Body({
     if (!validate(step)) return
     setStep((s) => Math.min(3, s + 1))
   }
-  const back = () => setStep((s) => Math.max(1, s - 1))
+  const back = () => {
+    setErrors({})
+    setStep((s) => Math.max(1, s - 1))
+  }
 
   function save() {
+    // Check the whole form again and go back to the first step that has an error
+    const badStep = firstInvalidStep(formValues)
+    if (badStep) {
+      setStep(badStep)
+      validate(badStep)
+      return
+    }
     // TODO: call the API here
     onSave?.({
       id: Date.now(),
@@ -393,12 +413,13 @@ function Body({
                         />
                       </Field>
 
-                      <Field label="Calculation Type">
+                      <Field label="Calculation Type" error={errors.calc}>
                         <IconSelect
                           icon={Calculator}
                           value={calc}
-                          onChange={setCalc}
+                          onChange={(v) => { setCalc(v); clearErr('calc'); clearErr('amount') }}
                           options={CALC_TYPES.map((t) => t.label)}
+                          error={!!errors.calc}
                         />
                       </Field>
 
@@ -413,21 +434,34 @@ function Body({
                         />
                       </Field>
 
-                      <Field label="Frequency">
-                        <IconSelect icon={CalendarDays} value={freq} onChange={setFreq} options={FREQUENCIES} />
-                      </Field>
-
-                      <Field label="Applicable To">
+                      <Field label="Frequency" error={errors.freq}>
                         <IconSelect
-                          icon={Users}
-                          value={appliesTo}
-                          onChange={(v) => { setAppliesTo(v); clearErr('wings'); clearErr('flats') }}
-                          options={APPLICABLE_TO}
+                          icon={CalendarDays}
+                          value={freq}
+                          onChange={(v) => { setFreq(v); clearErr('freq') }}
+                          options={FREQUENCIES}
+                          error={!!errors.freq}
                         />
                       </Field>
 
-                      <Field label="Tax Configuration">
-                        <IconSelect icon={Percent} value={tax} onChange={setTax} options={TAX_OPTIONS} />
+                      <Field label="Applicable To" error={errors.appliesTo}>
+                        <IconSelect
+                          icon={Users}
+                          value={appliesTo}
+                          onChange={(v) => { setAppliesTo(v); clearErr('appliesTo'); clearErr('wings'); clearErr('flats') }}
+                          options={APPLICABLE_TO}
+                          error={!!errors.appliesTo}
+                        />
+                      </Field>
+
+                      <Field label="Tax Configuration" error={errors.tax}>
+                        <IconSelect
+                          icon={Percent}
+                          value={tax}
+                          onChange={(v) => { setTax(v); clearErr('tax') }}
+                          options={TAX_OPTIONS}
+                          error={!!errors.tax}
+                        />
                       </Field>
 
                       <Field label="Status">
@@ -545,13 +579,13 @@ function Body({
                     </div>
 
                     <div className="mt-3">
-                      <Field label="Description (Optional)">
+                      <Field label="Description (Optional)" error={errors.description}>
                         <textarea
                           value={description}
-                          onChange={(e) => setDescription(e.target.value)}
+                          onChange={(e) => { setDescription(e.target.value); clearErr('description') }}
                           rows={3}
                           placeholder="Add a short note about this charge head"
-                          className={`${inputCls()} resize-none`}
+                          className={`${inputCls(false, !!errors.description)} resize-none`}
                         />
                       </Field>
                     </div>

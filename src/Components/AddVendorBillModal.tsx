@@ -9,10 +9,25 @@ import {
   Network, IndianRupee, Plus, Trash2, UploadCloud, Paperclip, StickyNote, Clock,
   Info, ChevronDown,
 } from 'lucide-react'
+// Options, limits and validation come from the treasurer schema file
+import {
+  VENDOR_CATEGORIES,
+  TAX_RATES,
+  PAYMENT_MODES,
+  BANK_CASH_ACCOUNTS,
+  COST_CENTERS,
+  ACCOUNTS,
+  MAX_DESC,
+  MAX_NOTES,
+  MAX_FILE_MB,
+  MAX_FILES,
+  ALLOWED_FILE_TYPES,
+  validateVendorBill,
+} from '@/lib/validations/treasurerVendorBill.schema'
 
 /* ---------- Config ---------- */
 
-// TODO: fetch these lists from the API later
+// TODO: fetch this list from the API later
 // Each vendor has a default category (selecting a vendor auto-fills the category)
 const VENDORS = [
   { name: 'ABC Elevator Services', category: 'Maintenance' },
@@ -20,24 +35,6 @@ const VENDORS = [
   { name: 'CleanPro Housekeeping', category: 'Housekeeping' },
   { name: 'PowerGrid Electricals', category: 'Electricity' },
 ]
-const VENDOR_CATEGORIES = ['Maintenance', 'Security', 'Housekeeping', 'Electricity', 'Plumbing', 'Gardening', 'Administration']
-const TAX_RATES = ['0%', '5%', '12%', '18%', '28%']
-const PAYMENT_MODES = ['Cash', 'Cheque', 'Bank Transfer', 'UPI', 'Card']
-const BANK_CASH_ACCOUNTS = ['Cash in Hand', 'HDFC Bank - 1234567890', 'SBI Bank - 9876543210']
-const COST_CENTERS = ['Maintenance', 'Security', 'Housekeeping', 'Electricity', 'Administration']
-const ACCOUNTS = [
-  'Lift Maintenance',
-  'Maintenance Expenses A/c',
-  'Electricity Expenses A/c',
-  'Security Expenses A/c',
-  'Housekeeping Expenses A/c',
-  'Accounts Payable A/c',
-]
-
-const MAX_DESC = 500
-const MAX_NOTES = 500
-const MAX_FILE_MB = 10
-const ALLOWED_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png']
 
 type LineItem = {
   id: number
@@ -215,8 +212,8 @@ function IconSelect({
 
 // Date input with a left calendar icon
 function DateInput({
-  value, onChange, error, min,
-}: { value: string; onChange: (v: string) => void; error?: boolean; min?: string }) {
+  value, onChange, error, min, max,
+}: { value: string; onChange: (v: string) => void; error?: boolean; min?: string; max?: string }) {
   return (
     <div className="relative">
       <CalendarDays className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-500" />
@@ -224,6 +221,7 @@ function DateInput({
         type="date"
         value={value}
         min={min}
+        max={max}
         onChange={(e) => onChange(e.target.value)}
         className={`${inputCls(true, error)} scheme-dark`}
       />
@@ -358,6 +356,12 @@ function Body({
       else if (f.size > MAX_FILE_MB * 1024 * 1024) problem = `Each file must be under ${MAX_FILE_MB}MB`
       else accepted.push(f)
     })
+    // Do not allow more than MAX_FILES files in total
+    const room = MAX_FILES - files.length
+    if (accepted.length > room) {
+      problem = `You can attach up to ${MAX_FILES} files`
+      accepted.splice(Math.max(room, 0))
+    }
     if (accepted.length) setFiles((p) => [...p, ...accepted])
     setErrors((p) => ({ ...p, files: problem }))
   }
@@ -373,25 +377,36 @@ function Body({
 
   /* ----- Validation + submit ----- */
 
-  // "draft" needs vendor + title. "submit" needs every required field.
+  // "draft" needs vendor + title. "submit" needs every required field. (uses the treasurer schema)
   function validate(mode: 'draft' | 'submit') {
-    const err: Record<string, string> = {}
-    if (!vendor) err.vendor = 'Select a vendor'
-    if (!title.trim()) err.title = 'Bill title is required'
-
-    if (mode === 'submit') {
-      if (!category) err.category = 'Select a category'
-      if (!invoiceNo.trim()) err.invoiceNo = 'Invoice number is required'
-      if (!invoiceDate) err.invoiceDate = 'Invoice date is required'
-      if (!dueDate) err.dueDate = 'Due date is required'
-      else if (invoiceDate && dueDate < invoiceDate) err.dueDate = 'Due date cannot be before invoice date'
-      if (!description.trim()) err.description = 'Description is required'
-      if (!summary.subtotal) err.amount = 'Bill amount is required'
-      if (summary.disc > summary.subtotal + summary.gst) err.discount = 'Discount is more than the bill total'
-
-      const used = lines.filter((l) => l.account && (toNum(l.debit) > 0 || toNum(l.credit) > 0))
-      if (used.length === 0) err.lines = 'Add at least one ledger line with an account and an amount'
-    }
+    const err = validateVendorBill(
+      {
+        vendor,
+        vendorExists: VENDORS.some((v) => v.name === vendor),
+        category,
+        invoiceNo,
+        reference,
+        invoiceDate,
+        dueDate,
+        title,
+        description,
+        amount,
+        taxRate,
+        discount,
+        paymentMode,
+        bankAccount,
+        costCenter,
+        lines: lines.map((l) => ({
+          account: l.account,
+          description: l.description,
+          debit: l.debit,
+          credit: l.credit,
+        })),
+        notes,
+        files: files.map((f) => ({ name: f.name, type: f.type, size: f.size })),
+      },
+      mode,
+    )
 
     setErrors(err)
     return Object.keys(err).length === 0
@@ -514,11 +529,12 @@ function Body({
                 />
               </Field>
 
-              <Field label="Reference / PO Number">
+              <Field label="Reference / PO Number" error={errors.reference}>
                 <IconInput
                   icon={FileText}
                   value={reference}
-                  onChange={(e) => setReference(e.target.value)}
+                  onChange={(e) => { setReference(e.target.value); clearErr('reference') }}
+                  error={!!errors.reference}
                   placeholder="Enter reference / PO number"
                 />
               </Field>
@@ -526,6 +542,7 @@ function Body({
               <Field label="Invoice Date" required error={errors.invoiceDate}>
                 <DateInput
                   value={invoiceDate}
+                  max={daysFromToday(0)}
                   onChange={(v) => { setInvoiceDate(v); clearErr('invoiceDate'); clearErr('dueDate') }}
                   error={!!errors.invoiceDate}
                 />
@@ -573,14 +590,19 @@ function Body({
               <Field label="Bill Amount (₹)" required error={errors.amount}>
                 <RupeeInput
                   value={amount}
-                  onChange={(e) => { setAmount(cleanAmount(e.target.value)); clearErr('amount') }}
+                  onChange={(e) => { setAmount(cleanAmount(e.target.value)); clearErr('amount'); clearErr('discount') }}
                   placeholder="0.00"
                   error={!!errors.amount}
                 />
               </Field>
 
-              <Field label="Tax / GST (%)">
-                <IconSelect value={taxRate} onChange={setTaxRate} options={TAX_RATES} />
+              <Field label="Tax / GST (%)" error={errors.taxRate}>
+                <IconSelect
+                  value={taxRate}
+                  onChange={(v) => { setTaxRate(v); clearErr('taxRate'); clearErr('discount') }}
+                  options={TAX_RATES}
+                  error={!!errors.taxRate}
+                />
               </Field>
 
               <Field label="Discount (₹)" error={errors.discount}>
@@ -592,33 +614,36 @@ function Body({
                 />
               </Field>
 
-              <Field label="Payment Mode">
+              <Field label="Payment Mode" error={errors.paymentMode}>
                 <IconSelect
                   icon={CreditCard}
                   value={paymentMode}
-                  onChange={setPaymentMode}
+                  onChange={(v) => { setPaymentMode(v); clearErr('paymentMode'); clearErr('bankAccount') }}
                   options={PAYMENT_MODES}
                   placeholder="Select payment mode"
+                  error={!!errors.paymentMode}
                 />
               </Field>
 
-              <Field label="Bank / Cash Account">
+              <Field label="Bank / Cash Account" error={errors.bankAccount}>
                 <IconSelect
                   icon={Landmark}
                   value={bankAccount}
-                  onChange={setBankAccount}
+                  onChange={(v) => { setBankAccount(v); clearErr('bankAccount') }}
                   options={BANK_CASH_ACCOUNTS}
                   placeholder="Select bank or cash account"
+                  error={!!errors.bankAccount}
                 />
               </Field>
 
-              <Field label="Cost Center / Department">
+              <Field label="Cost Center / Department" error={errors.costCenter}>
                 <IconSelect
                   icon={Network}
                   value={costCenter}
-                  onChange={setCostCenter}
+                  onChange={(v) => { setCostCenter(v); clearErr('costCenter') }}
                   options={COST_CENTERS}
                   placeholder="Select cost center"
+                  error={!!errors.costCenter}
                 />
               </Field>
             </div>
@@ -752,7 +777,7 @@ function Body({
                             <span className="text-slate-500">{fileSize(f.size)}</span>
                             <button
                               type="button"
-                              onClick={() => setFiles((p) => p.filter((_, idx) => idx !== i))}
+                              onClick={() => { setFiles((p) => p.filter((_, idx) => idx !== i)); clearErr('files') }}
                               aria-label={`Remove ${f.name}`}
                               className="cursor-pointer rounded p-0.5 text-slate-400 hover:bg-white/5 hover:text-white"
                             >
@@ -775,15 +800,16 @@ function Body({
                   <textarea
                     value={notes}
                     maxLength={MAX_NOTES}
-                    onChange={(e) => setNotes(e.target.value)}
+                    onChange={(e) => { setNotes(e.target.value); clearErr('notes') }}
                     rows={6}
                     placeholder="Enter any additional notes or remarks..."
-                    className={`${inputCls()} resize-none pb-6`}
+                    className={`${inputCls(false, !!errors.notes)} resize-none pb-6`}
                   />
                   <span className="pointer-events-none absolute bottom-2 right-2.5 text-[10px] text-slate-500">
                     {notes.length}/{MAX_NOTES}
                   </span>
                 </div>
+                {errors.notes && <p className="mt-1 text-[9px] text-red-400">{errors.notes}</p>}
               </div>
             </div>
           </Section>

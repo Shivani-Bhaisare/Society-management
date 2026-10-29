@@ -7,12 +7,10 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   X, Receipt, CalendarDays, ChevronDown, Info, ArrowRight, ArrowLeft, Check,
 } from 'lucide-react'
+// Wings, plans and validation come from the treasurer schema file
+import { WINGS, PLANS, validateBilling } from '@/lib/validations/treasurerGenerateBills.schema'
 
 /* ---------- Config ---------- */
-
-// TODO: fetch these from the API later
-const WINGS = ['All Wings', 'A', 'B', 'C']
-const PLANS = ['Monthly Maintenance', 'Basic Plan']
 
 type ChargeHead = {
   id: number
@@ -269,44 +267,73 @@ function Body({
     setPlan(p)
     setHeads(PLAN_HEADS[p])
     clearErr('heads')
+    clearErr('plan')
+    clearErr('total')
   }
 
   const changeWing = (w: string) => {
     setWing(w)
     setPickedFlats([])
     clearErr('flats')
+    clearErr('wing')
+    clearErr('total')
   }
 
   const toggleHead = (id: number) => {
     setHeads((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
     clearErr('heads')
+    clearErr('total')
   }
 
   const toggleFlat = (flat: string) => {
     setPickedFlats((p) => (p.includes(flat) ? p.filter((x) => x !== flat) : [...p, flat]))
     clearErr('flats')
+    clearErr('total')
   }
 
-  // Validate step 1 before moving on
+  // Validate all billing details (step 1) with the schema helper
   function validateStep1() {
+    const err = validateBilling({
+      month,
+      dueDate,
+      wing,
+      plan,
+      flatMode,
+      pickedFlats,
+      headCount: pickedHeads.length,
+      flatCount: targetFlats.length,
+      total: grandTotal,
+    })
+    setErrors(err)
+    return Object.keys(err).length === 0
+  }
+
+  // Validate the preview (step 2): there must be flats and a total above zero
+  function validateStep2() {
     const err: Record<string, string> = {}
-    if (!month) err.month = 'Billing month is required'
-    if (!dueDate) err.dueDate = 'Due date is required'
-    else if (month && dueDate.slice(0, 7) < month) err.dueDate = 'Due date cannot be before the billing month'
-    if (pickedHeads.length === 0) err.heads = 'Select at least one charge head'
-    if (flatMode === 'selected' && pickedFlats.length === 0) err.flats = 'Select at least one flat'
-    else if (targetFlats.length === 0) err.flats = 'No flats found for this wing'
+    if (targetFlats.length === 0) err.preview = 'No flats to generate bills for'
+    else if (grandTotal <= 0) err.preview = 'Total bill amount cannot be zero'
     setErrors(err)
     return Object.keys(err).length === 0
   }
 
   const next = () => {
     if (step === 1 && !validateStep1()) return
+    if (step === 2 && !validateStep2()) return
+    setErrors({})
     setStep((s) => Math.min(3, s + 1))
   }
-  const back = () => setStep((s) => Math.max(1, s - 1))
+  const back = () => {
+    setErrors({})
+    setStep((s) => Math.max(1, s - 1))
+  }
 
   function generate() {
+    // Check all details again before generating, and go back to step 1 if something is wrong
+    if (!validateStep1()) {
+      setStep(1)
+      return
+    }
     if (!confirmed) {
       setErrors({ confirm: 'Please confirm before generating the bills' })
       return
@@ -408,7 +435,11 @@ function Body({
                           <input
                             type="month"
                             value={month}
-                            onChange={(e) => { setMonth(e.target.value); clearErr('month') }}
+                            onChange={(e) => {
+                              setMonth(e.target.value)
+                              clearErr('month')
+                              clearErr('dueDate')
+                            }}
                             className={`${inputCls(true, !!errors.month)} scheme-dark`}
                           />
                         </div>
@@ -426,12 +457,12 @@ function Body({
                         </div>
                       </Field>
 
-                      <Field label="Applicable Wing">
-                        <SelectBox value={wing} onChange={changeWing} options={WINGS} />
+                      <Field label="Applicable Wing" error={errors.wing}>
+                        <SelectBox value={wing} onChange={changeWing} options={WINGS} error={!!errors.wing} />
                       </Field>
 
-                      <Field label="Charge Plan">
-                        <SelectBox value={plan} onChange={changePlan} options={PLANS} />
+                      <Field label="Charge Plan" error={errors.plan}>
+                        <SelectBox value={plan} onChange={changePlan} options={PLANS} error={!!errors.plan} />
                       </Field>
                     </div>
 
@@ -445,7 +476,12 @@ function Body({
                               type="radio"
                               name="flatMode"
                               checked={flatMode === k}
-                              onChange={() => { setFlatMode(k); setFlatsOpen(false); clearErr('flats') }}
+                              onChange={() => {
+                                setFlatMode(k)
+                                setFlatsOpen(false)
+                                clearErr('flats')
+                                clearErr('total')
+                              }}
                               className="h-3 w-3 cursor-pointer accent-[#6C63FF]"
                             />
                             {label}
@@ -537,6 +573,9 @@ function Body({
                         </div>
                       </div>
                     </div>
+
+                    {/* Error when the total amount is zero */}
+                    {errors.total && <p className="mt-2 text-[9px] text-red-400">{errors.total}</p>}
                   </>
                 )}
 
@@ -600,6 +639,9 @@ function Body({
                         {expanded ? 'Hide Details' : 'View Details'}
                       </button>
                     </div>
+
+                    {/* Error when there is nothing to generate */}
+                    {errors.preview && <p className="mt-2 text-[9px] text-red-400">{errors.preview}</p>}
                   </>
                 )}
 

@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ElementType, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   X, FileText, CalendarDays, ChevronDown, Building2, Send, FileType2, BookOpen,
 } from 'lucide-react'
+import { buildGenerateReportSchema, fyRange } from '@/lib/validations/treasurerGenerateReport.schema'
+import { issuesToErrors } from '@/lib/validations/treasurerValidationHelpers'
 
 /* ---------- Config ---------- */
 
@@ -28,6 +30,14 @@ const REPORT_FORMATS = ['PDF', 'Excel', 'CSV']
 
 const MAX_NOTES = 500
 
+// Schema is built once, with the same lists the dropdowns use
+const reportSchema = buildGenerateReportSchema({
+  financialYears: FINANCIAL_YEARS,
+  reportTypes: REPORT_TYPES,
+  branches: BRANCHES,
+  formats: REPORT_FORMATS,
+})
+
 // Data sent to the page when the report is generated
 export type GenerateReportPayload = {
   id: number
@@ -44,12 +54,6 @@ const noScrollbar =
   '[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'
 
 /* ---------- Helpers ---------- */
-
-// "2025-26" -> { from: "2025-04-01", to: "2026-03-31" } (Indian financial year)
-const fyRange = (fy: string) => {
-  const start = Number(fy.slice(0, 4))
-  return { from: `${start}-04-01`, to: `${start + 1}-03-31` }
-}
 
 // "2025-04-01" -> "01 Apr 2025"
 const prettyDate = (v: string) =>
@@ -204,6 +208,9 @@ function Body({
 
   const clearErr = (k: string) => setErrors((p) => ({ ...p, [k]: '' }))
 
+  // Date pickers only allow dates inside the chosen financial year
+  const range = useMemo(() => fyRange(financialYear), [financialYear])
+
   // Changing the financial year also resets the date range to that year
   const onYearChange = (fy: string) => {
     setFinancialYear(fy)
@@ -215,16 +222,24 @@ function Body({
   }
 
   /* ----- Validation + submit ----- */
-  // Required: financial year, report type, date range, report format
+  // Validate the whole form with the zod schema (all errors are shown together)
   function validate() {
-    const err: Record<string, string> = {}
-    if (!financialYear) err.financialYear = 'Select a financial year'
-    if (!reportType) err.reportType = 'Select a report type'
-    if (!dateFrom || !dateTo) err.dateRange = 'Select both dates'
-    else if (dateTo < dateFrom) err.dateRange = 'End date cannot be before start date'
-    if (!format) err.format = 'Select a report format'
-    setErrors(err)
-    return Object.keys(err).length === 0
+    const result = reportSchema.safeParse({
+      financialYear,
+      reportType,
+      branch,
+      dateFrom,
+      dateTo,
+      format,
+      notes,
+    })
+
+    if (!result.success) {
+      setErrors(issuesToErrors(result.error.issues))
+      return false
+    }
+    setErrors({})
+    return true
   }
 
   function submit() {
@@ -316,8 +331,14 @@ function Body({
               </Field>
 
               {/* Branch */}
-              <Field label="Branch">
-                <IconSelect icon={Building2} value={branch} onChange={setBranch} options={BRANCHES} />
+              <Field label="Branch" error={errors.branch}>
+                <IconSelect
+                  icon={Building2}
+                  value={branch}
+                  onChange={(v) => { setBranch(v); clearErr('branch') }}
+                  options={BRANCHES}
+                  error={!!errors.branch}
+                />
               </Field>
 
               {/* Report format */}
@@ -337,7 +358,8 @@ function Body({
                   <DateBox
                     label="From date"
                     value={dateFrom}
-                    max={dateTo || undefined}
+                    min={range.from}
+                    max={dateTo || range.to}
                     onChange={(v) => { setDateFrom(v); clearErr('dateRange') }}
                     error={!!errors.dateRange}
                   />
@@ -345,7 +367,8 @@ function Body({
                   <DateBox
                     label="To date"
                     value={dateTo}
-                    min={dateFrom || undefined}
+                    min={dateFrom || range.from}
+                    max={range.to}
                     onChange={(v) => { setDateTo(v); clearErr('dateRange') }}
                     error={!!errors.dateRange}
                   />
@@ -355,14 +378,14 @@ function Body({
 
             {/* Description / notes */}
             <div className="mt-3">
-              <Field label="Description / Notes" optional>
+              <Field label="Description / Notes" optional error={errors.notes}>
                 <textarea
                   value={notes}
                   maxLength={MAX_NOTES}
-                  onChange={(e) => setNotes(e.target.value)}
+                  onChange={(e) => { setNotes(e.target.value); clearErr('notes') }}
                   rows={4}
                   placeholder="Enter any additional notes or remarks..."
-                  className={`${inputCls()} resize-none`}
+                  className={`${inputCls(false, !!errors.notes)} resize-none`}
                 />
                 <p className="mt-1 text-right text-[9px] text-slate-500">{notes.length}/{MAX_NOTES}</p>
               </Field>

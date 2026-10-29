@@ -7,15 +7,16 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   X, Receipt, Save, CalendarDays, ChevronDown, IndianRupee, Percent, BarChart3, Eye,
 } from 'lucide-react'
+// Options, limits and validation come from the treasurer schema file
+import {
+  CHARGE_HEADS,
+  FREQUENCIES,
+  MAX_NAME,
+  MAX_NOTES,
+  validateLateFeeRule,
+} from '@/lib/validations/treasurerLateFeeRule.schema'
 
 /* ---------- Config ---------- */
-
-// TODO: fetch these lists from the API later
-const CHARGE_HEADS = ['Maintenance', 'Parking', 'Water', 'Electricity', 'Clubhouse', 'Others']
-const FREQUENCIES = ['One Time', 'Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly']
-
-const MAX_NAME = 100
-const MAX_NOTES = 500
 
 type FeeType = 'Fixed' | 'Percentage' | 'Interest'
 type ApplyTo = 'All' | 'Selected'
@@ -253,15 +254,21 @@ function Body({
   }, [grace, rate, feeType, frequency])
 
   /* ----- Validation + submit ----- */
+
+  // Validates the whole form with the treasurer schema
   function validate() {
-    const err: Record<string, string> = {}
-    if (!name.trim()) err.name = 'Rule name is required'
-    if (!chargeHead) err.chargeHead = 'Select a charge head'
-    if (grace === '') err.grace = 'Enter grace period'
-    if (!(Number(rate) > 0)) err.rate = 'Enter a rate / amount'
-    else if (feeType !== 'Fixed' && Number(rate) > 100) err.rate = 'Cannot be more than 100%'
-    if (!effectiveFrom) err.effectiveFrom = 'Select a date'
-    if (applyTo === 'Selected' && !units.trim()) err.units = 'Enter at least one unit'
+    const err = validateLateFeeRule({
+      name,
+      chargeHead,
+      grace,
+      feeType,
+      rate,
+      frequency,
+      effectiveFrom,
+      applyTo,
+      units,
+      notes,
+    })
     setErrors(err)
     return Object.keys(err).length === 0
   }
@@ -371,7 +378,7 @@ function Body({
               />
             </Field>
 
-            <Field label="Fee Type">
+            <Field label="Fee Type" error={errors.feeType}>
               <div className="grid grid-cols-3 gap-2">
                 {FEE_TYPES.map(({ key, label, sub, icon: Icon }) => {
                   const active = key === feeType
@@ -379,7 +386,7 @@ function Body({
                     <button
                       key={key}
                       type="button"
-                      onClick={() => { setFeeType(key); clearErr('rate') }}
+                      onClick={() => { setFeeType(key); clearErr('rate'); clearErr('feeType') }}
                       aria-pressed={active}
                       className={`flex min-w-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border px-1.5 py-2.5 text-center transition-colors ${
                         active
@@ -411,8 +418,13 @@ function Body({
               />
             </Field>
 
-            <Field label="Frequency">
-              <SimpleSelect value={frequency} onChange={setFrequency} options={FREQUENCIES} />
+            <Field label="Frequency" error={errors.frequency}>
+              <SimpleSelect
+                value={frequency}
+                onChange={(v) => { setFrequency(v); clearErr('frequency') }}
+                options={FREQUENCIES}
+                error={!!errors.frequency}
+              />
             </Field>
           </div>
 
@@ -487,14 +499,14 @@ function Body({
           </div>
 
           {/* Description / notes */}
-          <Field label="Description / Notes">
+          <Field label="Description / Notes" error={errors.notes}>
             <textarea
               value={notes}
               maxLength={MAX_NOTES}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => { setNotes(e.target.value); clearErr('notes') }}
               rows={3}
               placeholder="Add any additional notes or details about this rule..."
-              className={`${inputCls()} resize-none`}
+              className={`${inputCls(false, !!errors.notes)} resize-none`}
             />
             <p className="mt-1 text-right text-[10px] text-slate-500">{notes.length}/{MAX_NOTES}</p>
           </Field>

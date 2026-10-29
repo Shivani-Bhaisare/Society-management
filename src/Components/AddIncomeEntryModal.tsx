@@ -7,6 +7,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   X, Wallet, Save, CalendarDays, ChevronDown, IndianRupee, User, Hash,
 } from 'lucide-react'
+import { incomeEntrySchema } from '@/lib/validations/treasurerIncomeEntry.schema'
+import { issuesToErrors } from '@/lib/validations/treasurerValidationHelpers'
 
 /* ---------- Config ---------- */
 
@@ -150,6 +152,7 @@ function DatePicker({
       <input
         type="date"
         value={value}
+        max={today()}
         onChange={(e) => onChange(e.target.value)}
         onClick={(e) => e.currentTarget.showPicker?.()}
         aria-label="Transaction date"
@@ -213,16 +216,25 @@ function Body({
 
   const clearErr = (k: string) => setErrors((p) => ({ ...p, [k]: '' }))
 
-  // Required: title, category, amount, date, payment method
+  // Validate the whole form with the zod schema (all errors are shown together)
   function validate() {
-    const err: Record<string, string> = {}
-    if (!title.trim()) err.title = 'Income title is required'
-    if (!category) err.category = 'Select a category'
-    if (!(Number(amount) > 0)) err.amount = 'Enter a valid amount'
-    if (!date) err.date = 'Select a date'
-    if (!method) err.method = 'Select a payment method'
-    setErrors(err)
-    return Object.keys(err).length === 0
+    const result = incomeEntrySchema.safeParse({
+      title,
+      category,
+      amount,
+      date,
+      method,
+      receivedFrom,
+      reference,
+      notes,
+    })
+
+    if (!result.success) {
+      setErrors(issuesToErrors(result.error.issues))
+      return false
+    }
+    setErrors({})
+    return true
   }
 
   function submit() {
@@ -343,33 +355,35 @@ function Body({
           </div>
 
           {/* Received from */}
-          <Field label="Received From">
+          <Field label="Received From" error={errors.receivedFrom}>
             <IconInput
               icon={User}
               value={receivedFrom}
-              onChange={setReceivedFrom}
+              onChange={(v) => { setReceivedFrom(v); clearErr('receivedFrom') }}
               placeholder="Resident name / Vendor / Other"
+              error={!!errors.receivedFrom}
             />
           </Field>
 
           {/* Reference */}
-          <Field label="Reference / Transaction ID">
+          <Field label="Reference / Transaction ID" error={errors.reference}>
             <IconInput
               icon={Hash}
               value={reference}
-              onChange={setReference}
+              onChange={(v) => { setReference(v); clearErr('reference') }}
               placeholder="Enter reference number (optional)"
+              error={!!errors.reference}
             />
           </Field>
 
           {/* Description / notes */}
-          <Field label="Description / Notes">
+          <Field label="Description / Notes" error={errors.notes}>
             <textarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => { setNotes(e.target.value); clearErr('notes') }}
               rows={3}
               placeholder="Add transaction details..."
-              className={`${inputCls()} resize-none`}
+              className={`${inputCls(false, !!errors.notes)} resize-none`}
             />
           </Field>
         </div>

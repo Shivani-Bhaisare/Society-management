@@ -8,6 +8,14 @@ import {
   X, CreditCard, Save, Building2, FileText, IndianRupee, CalendarDays, Landmark,
   Link2, UploadCloud, Paperclip, StickyNote, CheckCircle2, ChevronDown, Wallet,
 } from 'lucide-react'
+// Options, limits and validation come from the treasurer schema file
+import {
+  PAYMENT_METHODS,
+  MAX_NOTES,
+  MAX_FILE_MB,
+  ALLOWED_FILE_TYPES,
+  validateRecordPayment,
+} from '@/lib/validations/treasurerRecordPayment.schema'
 
 /* ---------- Config ---------- */
 
@@ -21,11 +29,6 @@ const BILLS = [
   { vendor: 'Global Hardware', invoiceNo: 'V-005', total: 9750, paid: 0 },
 ]
 const VENDORS = Array.from(new Set(BILLS.map((b) => b.vendor)))
-const PAYMENT_METHODS = ['Cash', 'Cheque', 'Bank Transfer', 'UPI', 'Card']
-
-const MAX_NOTES = 500
-const MAX_FILE_MB = 5
-const ALLOWED_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png']
 
 type Option = { value: string; label: string }
 
@@ -351,14 +354,24 @@ function Body({
   }
 
   /* ----- Validation + submit ----- */
+
+  // Validates the whole form with the treasurer schema
   function validate() {
-    const err: Record<string, string> = {}
-    if (!vendor) err.vendor = 'Select a vendor'
-    if (!invoiceNo) err.invoiceNo = 'Select an invoice / bill'
-    if (!payAmount) err.amount = 'Payment amount is required'
-    else if (bill && payAmount > outstanding) err.amount = `Amount cannot be more than outstanding (₹ ${money(outstanding)})`
-    if (!paymentDate) err.paymentDate = 'Payment date is required'
-    if (!paymentMethod) err.paymentMethod = 'Select a payment method'
+    const err = validateRecordPayment({
+      vendor,
+      invoiceNo,
+      amount,
+      paymentDate,
+      paymentMethod,
+      referenceId,
+      notes,
+      receipt: receipt
+        ? { name: receipt.name, type: receipt.type, size: receipt.size }
+        : null,
+      vendorExists: VENDORS.includes(vendor),
+      billExists: !!bill,
+      outstanding,
+    })
 
     setErrors(err)
     return Object.keys(err).length === 0
@@ -494,18 +507,19 @@ function Body({
                 <IconSelect
                   icon={Landmark}
                   value={paymentMethod}
-                  onChange={(v) => { setPaymentMethod(v); clearErr('paymentMethod') }}
+                  onChange={(v) => { setPaymentMethod(v); clearErr('paymentMethod'); clearErr('referenceId') }}
                   options={methodOptions}
                   placeholder="Select payment method"
                   error={!!errors.paymentMethod}
                 />
               </Field>
 
-              <Field label="Transaction / Reference ID">
+              <Field label="Transaction / Reference ID" error={errors.referenceId}>
                 <IconInput
                   icon={Link2}
                   value={referenceId}
-                  onChange={(e) => setReferenceId(e.target.value)}
+                  onChange={(e) => { setReferenceId(e.target.value); clearErr('referenceId') }}
+                  error={!!errors.referenceId}
                   placeholder="Enter UTR / transaction number"
                 />
               </Field>
@@ -593,15 +607,16 @@ function Body({
                   <textarea
                     value={notes}
                     maxLength={MAX_NOTES}
-                    onChange={(e) => setNotes(e.target.value)}
+                    onChange={(e) => { setNotes(e.target.value); clearErr('notes') }}
                     rows={6}
                     placeholder="Add any additional details..."
-                    className={`${inputCls()} resize-none pb-6`}
+                    className={`${inputCls(false, !!errors.notes)} resize-none pb-6`}
                   />
                   <span className="pointer-events-none absolute bottom-2 right-2.5 text-[10px] text-slate-500">
                     {notes.length}/{MAX_NOTES}
                   </span>
                 </div>
+                {errors.notes && <p className="mt-1 text-[9px] text-red-400">{errors.notes}</p>}
               </div>
             </div>
           </Section>

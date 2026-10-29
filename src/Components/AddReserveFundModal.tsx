@@ -7,6 +7,12 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   X, Landmark, CalendarDays, ChevronDown, IndianRupee, UploadCloud, FilePlus2, ClipboardList,
 } from 'lucide-react'
+import {
+  buildReserveFundSchema,
+  ALLOWED_FILE_TYPES,
+  MAX_FILE_MB,
+} from '@/lib/validations/treasurerReserveFund.schema'
+import { issuesToErrors } from '@/lib/validations/treasurerValidationHelpers'
 
 /* ---------- Config ---------- */
 
@@ -16,8 +22,13 @@ const FREQUENCIES = ['Monthly', 'Quarterly', 'Half-Yearly', 'Yearly']
 const COMMITTEES = ['Managing Committee', 'Finance Committee', 'Maintenance Committee', 'Audit Committee']
 
 const MAX_DESC = 500
-const MAX_FILE_MB = 5
-const ALLOWED_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png']
+
+// Schema is built once, with the same lists the dropdowns use
+const fundSchema = buildReserveFundSchema({
+  fundTypes: FUND_TYPES,
+  frequencies: FREQUENCIES,
+  committees: COMMITTEES,
+})
 
 // Data sent to the page when the fund is created
 export type AddReserveFundPayload = {
@@ -142,7 +153,7 @@ function SimpleSelect({
 
 // Date field: shows "01 Apr 2025" while the real date picker sits invisibly on top
 function DateBox({
-  value, onChange, label, placeholder, error, min,
+  value, onChange, label, placeholder, error, min, max,
 }: {
   value: string
   onChange: (v: string) => void
@@ -150,6 +161,7 @@ function DateBox({
   placeholder: string
   error?: boolean
   min?: string
+  max?: string
 }) {
   return (
     <div className="relative min-w-0">
@@ -161,6 +173,7 @@ function DateBox({
         type="date"
         value={value}
         min={min}
+        max={max}
         onChange={(e) => onChange(e.target.value)}
         onClick={(e) => e.currentTarget.showPicker?.()}
         aria-label={label}
@@ -240,10 +253,15 @@ function Body({
   }, [targetAmount, openingBalance])
 
   /* ----- File helpers ----- */
+  // A wrong file is rejected right away (same rules as the schema), a good file is kept
   function addFile(f: File | undefined) {
     if (!f) return
     if (!ALLOWED_FILE_TYPES.includes(f.type)) {
       setErrors((p) => ({ ...p, file: 'Only PDF, JPG and PNG files are allowed' }))
+      return
+    }
+    if (f.size === 0) {
+      setErrors((p) => ({ ...p, file: 'This file is empty' }))
       return
     }
     if (f.size > MAX_FILE_MB * 1024 * 1024) {
@@ -264,19 +282,29 @@ function Body({
   }
 
   /* ----- Validation + submit ----- */
+  // Validate the whole form with the zod schema (all errors are shown together)
   function validate() {
-    const err: Record<string, string> = {}
-    if (!name.trim()) err.name = 'Fund name is required'
-    if (!(Number(targetAmount) > 0)) err.targetAmount = 'Enter a target amount'
-    if (summary.opening > summary.target && summary.target > 0) err.openingBalance = 'Cannot be more than the target amount'
-    if (!(Number(monthly) > 0)) err.monthly = 'Enter a contribution amount'
-    if (!startDate) err.startDate = 'Select a start date'
-    if (!targetDate) err.targetDate = 'Select a target date'
-    else if (startDate && targetDate <= startDate) err.targetDate = 'Must be after the start date'
-    if (!committee) err.committee = 'Select a committee'
-    if (!description.trim()) err.description = 'Description is required'
-    setErrors(err)
-    return Object.keys(err).length === 0
+    const result = fundSchema.safeParse({
+      name,
+      fundType,
+      targetAmount,
+      openingBalance,
+      monthly,
+      frequency,
+      startDate,
+      targetDate,
+      committee,
+      bankReference,
+      description,
+      file: file ? { type: file.type, size: file.size } : null,
+    })
+
+    if (!result.success) {
+      setErrors(issuesToErrors(result.error.issues))
+      return false
+    }
+    setErrors({})
+    return true
   }
 
   function submit() {
@@ -357,14 +385,24 @@ function Body({
               />
             </Field>
 
-            <Field label="Fund Type">
-              <SimpleSelect value={fundType} onChange={setFundType} options={FUND_TYPES} />
+            <Field label="Fund Type" error={errors.fundType}>
+              <SimpleSelect
+                value={fundType}
+                onChange={(v) => { setFundType(v); clearErr('fundType') }}
+                options={FUND_TYPES}
+                error={!!errors.fundType}
+              />
             </Field>
 
             <Field label="Target Amount" error={errors.targetAmount}>
               <RupeeInput
                 value={targetAmount}
-                onChange={(e) => { setTargetAmount(cleanAmount(e.target.value)); clearErr('targetAmount'); clearErr('openingBalance') }}
+                onChange={(e) => {
+                  setTargetAmount(cleanAmount(e.target.value))
+                  clearErr('targetAmount')
+                  clearErr('openingBalance')
+                  clearErr('monthly')
+                }}
                 placeholder="Enter target amount"
                 error={!!errors.targetAmount}
               />
@@ -388,8 +426,13 @@ function Body({
               />
             </Field>
 
-            <Field label="Contribution Frequency">
-              <SimpleSelect value={frequency} onChange={setFrequency} options={FREQUENCIES} />
+            <Field label="Contribution Frequency" error={errors.frequency}>
+              <SimpleSelect
+                value={frequency}
+                onChange={(v) => { setFrequency(v); clearErr('frequency') }}
+                options={FREQUENCIES}
+                error={!!errors.frequency}
+              />
             </Field>
 
             <Field label="Start Date" error={errors.startDate}>
@@ -397,6 +440,8 @@ function Body({
                 label="Start date"
                 placeholder="Select start date"
                 value={startDate}
+                min="2000-01-01"
+                max="2100-12-31"
                 onChange={(v) => { setStartDate(v); clearErr('startDate'); clearErr('targetDate') }}
                 error={!!errors.startDate}
               />
@@ -407,7 +452,8 @@ function Body({
                 label="Target date"
                 placeholder="Select target date"
                 value={targetDate}
-                min={startDate || undefined}
+                min={startDate || '2000-01-01'}
+                max="2100-12-31"
                 onChange={(v) => { setTargetDate(v); clearErr('targetDate') }}
                 error={!!errors.targetDate}
               />
@@ -423,12 +469,13 @@ function Body({
               />
             </Field>
 
-            <Field label="Account / Bank Reference" optional>
+            <Field label="Account / Bank Reference" optional error={errors.bankReference}>
               <IconInput
                 icon={Landmark}
                 value={bankReference}
-                onChange={(e) => setBankReference(e.target.value)}
+                onChange={(e) => { setBankReference(e.target.value); clearErr('bankReference') }}
                 placeholder="Enter account or bank reference"
+                error={!!errors.bankReference}
               />
             </Field>
           </div>
@@ -493,7 +540,11 @@ function Body({
               onDragLeave={() => setDragging(false)}
               onDrop={onDrop}
               className={`flex cursor-pointer items-center justify-center gap-3 rounded-md border border-dashed px-3 py-4 text-left transition-colors ${
-                dragging ? 'border-[#6C63FF] bg-[#6C63FF]/10' : 'border-[#6C63FF]/50 bg-[#0B0E14] hover:bg-white/3'
+                dragging
+                  ? 'border-[#6C63FF] bg-[#6C63FF]/10'
+                  : errors.file
+                    ? 'border-red-500/60 bg-[#0B0E14] hover:bg-white/3'
+                    : 'border-[#6C63FF]/50 bg-[#0B0E14] hover:bg-white/3'
               }`}
             >
               <UploadCloud className="h-6 w-6 shrink-0 text-[#4DA3FF]" />
@@ -503,7 +554,7 @@ function Body({
                     <p className="truncate text-[11px] font-semibold text-white">{file.name}</p>
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); setFile(null) }}
+                      onClick={(e) => { e.stopPropagation(); setFile(null); clearErr('file') }}
                       className="cursor-pointer text-[10px] text-red-400 hover:underline"
                     >
                       Remove file

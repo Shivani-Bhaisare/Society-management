@@ -8,6 +8,8 @@ import {
   X, ReceiptText, Save, CalendarDays, ChevronDown, IndianRupee, User, Hash,
   UploadCloud, FileText,
 } from 'lucide-react'
+import { expenseEntrySchema } from '@/lib/validations/treasurerExpenseEntry.schema'
+import { issuesToErrors } from '@/lib/validations/treasurerValidationHelpers'
 
 /* ---------- Config ---------- */
 
@@ -160,6 +162,7 @@ function DatePicker({
       <input
         type="date"
         value={value}
+        max={today()}
         onChange={(e) => onChange(e.target.value)}
         onClick={(e) => e.currentTarget.showPicker?.()}
         aria-label="Expense date"
@@ -194,7 +197,7 @@ function FileDrop({
       />
 
       {file ? (
-        <div className="flex items-center gap-2.5 rounded-md border border-[#272D39] bg-[#0B0E14] p-2.5">
+        <div className={`flex items-center gap-2.5 rounded-md border bg-[#0B0E14] p-2.5 ${error ? 'border-red-500/60' : 'border-[#272D39]'}`}>
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#6C63FF]/15">
             <FileText className="h-4 w-4 text-[#A29CFF]" />
           </span>
@@ -232,7 +235,7 @@ function FileDrop({
           <span className="text-[11px] font-semibold text-slate-200">
             Click to upload <span className="font-normal text-slate-400">or drag and drop</span>
           </span>
-          <span className="text-[9px] text-slate-500">PNG, JPG or PDF (Optional)</span>
+          <span className="text-[9px] text-slate-500">PNG, JPG or PDF, max 5 MB (Optional)</span>
         </button>
       )}
     </Field>
@@ -295,17 +298,27 @@ function Body({
 
   const clearErr = (k: string) => setErrors((p) => ({ ...p, [k]: '' }))
 
-  // Required: title, category, amount, date, payment status, paid to
+  // Validate the whole form with the zod schema (all errors are shown together)
   function validate() {
-    const err: Record<string, string> = {}
-    if (!title.trim()) err.title = 'Expense title is required'
-    if (!category) err.category = 'Select a category'
-    if (!(Number(amount) > 0)) err.amount = 'Enter a valid amount'
-    if (!date) err.date = 'Select a date'
-    if (!status) err.status = 'Select a payment status'
-    if (!paidTo.trim()) err.paidTo = 'Vendor or recipient name is required'
-    setErrors(err)
-    return Object.keys(err).length === 0
+    const result = expenseEntrySchema.safeParse({
+      title,
+      category,
+      amount,
+      date,
+      status,
+      paidTo,
+      method,
+      invoiceNo,
+      notes,
+      file: file ? { type: file.type, size: file.size } : null,
+    })
+
+    if (!result.success) {
+      setErrors(issuesToErrors(result.error.issues))
+      return false
+    }
+    setErrors({})
+    return true
   }
 
   function submit() {
@@ -419,7 +432,7 @@ function Body({
             <Field label="Payment Status" error={errors.status}>
               <SimpleSelect
                 value={status}
-                onChange={(v) => { setStatus(v); clearErr('status') }}
+                onChange={(v) => { setStatus(v); clearErr('status'); clearErr('method') }}
                 options={PAYMENT_STATUSES}
                 placeholder="Select status"
                 error={!!errors.status}
@@ -436,39 +449,45 @@ function Body({
               />
             </Field>
 
-            <Field label="Payment Method">
+            <Field label="Payment Method" error={errors.method}>
               <SimpleSelect
                 value={method}
-                onChange={setMethod}
+                onChange={(v) => { setMethod(v); clearErr('method') }}
                 options={PAYMENT_METHODS}
                 placeholder="Select payment method"
+                error={!!errors.method}
               />
             </Field>
           </div>
 
           {/* Invoice number */}
-          <Field label="Invoice / Bill Number">
+          <Field label="Invoice / Bill Number" error={errors.invoiceNo}>
             <IconInput
               icon={Hash}
               value={invoiceNo}
-              onChange={setInvoiceNo}
+              onChange={(v) => { setInvoiceNo(v); clearErr('invoiceNo') }}
               placeholder="Enter invoice number (optional)"
+              error={!!errors.invoiceNo}
             />
           </Field>
 
           {/* Description / notes */}
-          <Field label="Description / Notes">
+          <Field label="Description / Notes" error={errors.notes}>
             <textarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => { setNotes(e.target.value); clearErr('notes') }}
               rows={3}
               placeholder="Enter expense details..."
-              className={`${inputCls()} resize-none`}
+              className={`${inputCls(false, !!errors.notes)} resize-none`}
             />
           </Field>
 
           {/* Bill / receipt upload */}
-          <FileDrop file={file} onChange={setFile} error={errors.file} />
+          <FileDrop
+            file={file}
+            onChange={(f) => { setFile(f); clearErr('file') }}
+            error={errors.file}
+          />
         </div>
 
         {/* Footer */}
