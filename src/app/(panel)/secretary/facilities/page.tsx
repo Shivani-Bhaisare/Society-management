@@ -1,11 +1,12 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
-import { motion, type Variants } from 'framer-motion'
+import { AnimatePresence, motion, type Variants } from 'framer-motion'
 import {
   Search, Plus, Clock, Users, CalendarCheck,
   Waves, Dumbbell, Building2, Trophy, TreePine, Car, LayoutGrid,
+  ChevronDown, Trash2, CheckCircle2, X,
   type LucideIcon,
 } from 'lucide-react'
 import { Badge } from '@/Components/ui'
@@ -36,6 +37,18 @@ const item: Variants = {
   },
 }
 
+// Facility card animation: each card animates by itself when it mounts (so cards that appear after a tab change, search or add are never stuck hidden)
+// "custom" is the card index and gives the one-after-another (stagger) delay
+const cardItem: Variants = {
+  hidden: { opacity: 0, y: 30, scale: 0.97 },
+  show: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.7, ease: EASE, delay: 0.05 + Math.min(i, 8) * 0.1 },
+  }),
+}
+
 /* ---------- Types ---------- */
 type Status = 'Open' | 'Available' | 'In Use' | 'Maintenance' | 'Unavailable'
 
@@ -51,8 +64,23 @@ type Facility = {
   img: string
 }
 
+// One booking made from the Book popup (replace with API data later)
+type Booking = {
+  id: number
+  facilityId: number
+  bookedBy: string
+  date: string
+  from: string
+  to: string
+  guests: number
+  purpose: string
+}
+
 const tabs = ['All', 'Available', 'In Use', 'Maintenance'] as const
 type Tab = (typeof tabs)[number]
+
+// All real statuses (used in the Manage popup)
+const statusList: Status[] = ['Open', 'Available', 'In Use', 'Maintenance', 'Unavailable']
 
 /* ---------- Data (replace with API later) ---------- */
 const initialFacilities: Facility[] = [
@@ -97,6 +125,601 @@ function matchTab(status: Status, tab: Tab) {
   return status === tab
 }
 
+// Today's date as "YYYY-MM-DD" (used as the minimum date in the Book popup)
+const todayStr = () => {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+// "2026-10-30" -> "30 Oct 2026"
+const fmtDate = (d: string) =>
+  new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+
+// Shared form field style
+const field =
+  'w-full appearance-none rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60'
+
+/* ---------- View Details popup ---------- */
+
+// One detail row (label on the left, value on the right)
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-[#272D39] py-2 text-[11px] first:border-t-0">
+      <span className="shrink-0 text-slate-400">{label}</span>
+      <span className="text-right font-medium text-slate-200">{value}</span>
+    </div>
+  )
+}
+
+function ViewFacilityModal({
+  record, bookingCount, onClose,
+}: {
+  record: Facility
+  bookingCount: number
+  onClose: () => void
+}) {
+  const Icon = record.icon
+
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-4 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold">Facility Details</h2>
+            <p className="truncate text-[11px] text-slate-400">{record.name}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Photo (icon placeholder if there is no image) */}
+        <div className="relative mt-3 h-36 w-full overflow-hidden rounded-lg border border-[#272D39]">
+          {record.img ? (
+            <Image
+              src={record.img}
+              alt={record.name}
+              fill
+              unoptimized={record.img.startsWith('blob:')}
+              sizes="400px"
+              className="object-cover"
+            />
+          ) : (
+            <div
+              className="flex h-full w-full items-center justify-center"
+              style={{ background: `${record.c}1A`, color: record.c }}
+            >
+              <Icon className="h-10 w-10" />
+            </div>
+          )}
+        </div>
+
+        {/* Status */}
+        <div className="mt-3 flex items-center justify-between rounded-lg border border-[#272D39] bg-white/3 px-3 py-2">
+          <span className="text-[11px] text-slate-400">Status</span>
+          <Badge tone={statusTone[record.status]}>{record.status}</Badge>
+        </div>
+
+        {/* Details */}
+        <div className="mt-2 rounded-lg border border-[#272D39] bg-white/3 px-3">
+          <DetailRow label="Facility No." value={`#${record.id}`} />
+          <DetailRow label="Name" value={record.name} />
+          <DetailRow label="Timing" value={record.timing} />
+          <DetailRow label="Capacity" value={record.capacity === null ? '—' : String(record.capacity)} />
+          <DetailRow label="Booking" value={record.booking ? 'Booking Required' : 'No Booking Needed'} />
+          <DetailRow label="Total Bookings" value={String(bookingCount)} />
+        </div>
+
+        {/* Actions */}
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Close
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+/* ---------- Manage Facility popup ---------- */
+
+function ManageFacilityModal({
+  record, onClose, onSubmit, onDelete,
+}: {
+  record: Facility
+  onClose: () => void
+  onSubmit: (updated: Facility) => void
+  onDelete: () => void
+}) {
+  const [name, setName] = useState(record.name)
+  const [fStatus, setFStatus] = useState<Status>(record.status)
+  const [timing, setTiming] = useState(record.timing)
+  const [capacity, setCapacity] = useState(record.capacity === null ? '' : String(record.capacity))
+  const [booking, setBooking] = useState(record.booking)
+  const [error, setError] = useState('')
+
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const capNum = Number(capacity)
+    if (name.trim().length < 3) {
+      setError('Name must be at least 3 characters.')
+      return
+    }
+    if (!timing.trim()) {
+      setError('Please enter the timing.')
+      return
+    }
+    if (capacity.trim() !== '' && (Number.isNaN(capNum) || capNum < 1)) {
+      setError('Capacity must be a number greater than 0.')
+      return
+    }
+    onSubmit({
+      ...record,
+      name: name.trim(),
+      status: fStatus,
+      timing: timing.trim(),
+      capacity: capacity.trim() === '' ? null : Math.round(capNum),
+      booking,
+    })
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold">Manage Facility</h2>
+            <p className="text-[11px] text-slate-400">Update the details of this facility</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Form fields */}
+        <div className="mt-4 flex flex-col gap-3">
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Facility Name
+            <input
+              value={name}
+              onChange={(e) => { setName(e.target.value); setError('') }}
+              className={field}
+              autoFocus
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Status
+              <div className="relative">
+                <select
+                  value={fStatus}
+                  onChange={(e) => setFStatus(e.target.value as Status)}
+                  className={`${field} cursor-pointer pr-8`}
+                >
+                  {statusList.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+              </div>
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Capacity
+              <input
+                type="number"
+                min={1}
+                value={capacity}
+                onChange={(e) => { setCapacity(e.target.value); setError('') }}
+                placeholder="e.g. 40"
+                className={field}
+              />
+            </label>
+          </div>
+
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Timing
+            <input
+              value={timing}
+              onChange={(e) => { setTiming(e.target.value); setError('') }}
+              placeholder="e.g. 6 AM - 10 PM"
+              className={field}
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Booking
+            <div className="relative">
+              <select
+                value={booking ? 'yes' : 'no'}
+                onChange={(e) => setBooking(e.target.value === 'yes')}
+                className={`${field} cursor-pointer pr-8`}
+              >
+                <option value="yes">Booking Required</option>
+                <option value="no">No Booking Needed</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+            </div>
+          </label>
+
+          {error && <p className="text-[11px] text-red-400">{error}</p>}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-5 flex items-center justify-between gap-2">
+          {/* Delete: opens the confirm popup */}
+          <button
+            type="button"
+            onClick={onDelete}
+            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 active:scale-95"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+          </button>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="cursor-pointer rounded-lg bg-linear-to-r from-[#6C63FF] to-[#4DA3FF] px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90 active:scale-95"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </motion.form>
+    </motion.div>
+  )
+}
+
+/* ---------- Book Facility popup ---------- */
+
+function BookFacilityModal({
+  record, onClose, onSubmit,
+}: {
+  record: Facility
+  onClose: () => void
+  onSubmit: (data: Omit<Booking, 'id' | 'facilityId'>) => void
+}) {
+  const [bookedBy, setBookedBy] = useState('')
+  const [date, setDate] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [guests, setGuests] = useState('1')
+  const [purpose, setPurpose] = useState('')
+  const [error, setError] = useState('')
+
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const guestNum = Number(guests)
+    if (bookedBy.trim().length < 3) {
+      setError('Name must be at least 3 characters.')
+      return
+    }
+    if (!date) {
+      setError('Please select a date.')
+      return
+    }
+    if (date < todayStr()) {
+      setError('Date cannot be in the past.')
+      return
+    }
+    if (!from || !to) {
+      setError('Please select the start and end time.')
+      return
+    }
+    if (to <= from) {
+      setError('End time must be after the start time.')
+      return
+    }
+    if (Number.isNaN(guestNum) || guestNum < 1) {
+      setError('Guests must be at least 1.')
+      return
+    }
+    if (record.capacity !== null && guestNum > record.capacity) {
+      setError(`Guests cannot be more than the capacity (${record.capacity}).`)
+      return
+    }
+    onSubmit({
+      bookedBy: bookedBy.trim(),
+      date,
+      from,
+      to,
+      guests: Math.round(guestNum),
+      purpose: purpose.trim(),
+    })
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-base font-bold">Book Facility</h2>
+            <p className="truncate text-[11px] text-slate-400">
+              {record.name} • {record.timing}
+              {record.capacity !== null && ` • Capacity ${record.capacity}`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Form fields */}
+        <div className="mt-4 flex flex-col gap-3">
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Booked By
+            <input
+              value={bookedBy}
+              onChange={(e) => { setBookedBy(e.target.value); setError('') }}
+              placeholder="e.g. Rahul Sharma"
+              className={field}
+              autoFocus
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Date
+              <input
+                type="date"
+                min={todayStr()}
+                value={date}
+                onChange={(e) => { setDate(e.target.value); setError('') }}
+                className={`${field} scheme-dark`}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Guests
+              <input
+                type="number"
+                min={1}
+                max={record.capacity ?? undefined}
+                value={guests}
+                onChange={(e) => { setGuests(e.target.value); setError('') }}
+                className={field}
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              From
+              <input
+                type="time"
+                value={from}
+                onChange={(e) => { setFrom(e.target.value); setError('') }}
+                className={`${field} scheme-dark`}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              To
+              <input
+                type="time"
+                value={to}
+                onChange={(e) => { setTo(e.target.value); setError('') }}
+                className={`${field} scheme-dark`}
+              />
+            </label>
+          </div>
+
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Purpose (optional)
+            <textarea
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value)}
+              rows={2}
+              placeholder="e.g. Birthday party"
+              className={`${field} resize-none`}
+            />
+          </label>
+
+          {error && <p className="text-[11px] text-red-400">{error}</p>}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="cursor-pointer rounded-lg bg-linear-to-r from-[#6C63FF] to-[#4DA3FF] px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90 active:scale-95"
+          >
+            Confirm Booking
+          </button>
+        </div>
+      </motion.form>
+    </motion.div>
+  )
+}
+
+/* ---------- Delete confirm popup ---------- */
+
+function DeleteFacilityConfirm({
+  record, onClose, onConfirm,
+}: {
+  record: Facility
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="w-full max-w-sm rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/15 text-red-400">
+            <Trash2 className="h-4 w-4" />
+          </span>
+          <div>
+            <h2 className="text-base font-bold">Delete Facility</h2>
+            <p className="text-[11px] text-slate-400">This action cannot be undone.</p>
+          </div>
+        </div>
+
+        <p className="mt-4 text-xs text-slate-300">
+          Are you sure you want to delete{' '}
+          <span className="font-semibold text-white">{record.name}</span>?
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="cursor-pointer rounded-lg bg-red-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-red-600 active:scale-95"
+          >
+            Delete
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 /* ---------- Page ---------- */
 export default function FacilitiesPage() {
   // Facilities data + modal state
@@ -105,6 +728,24 @@ export default function FacilitiesPage() {
 
   const [tab, setTab] = useState<Tab>('All')
   const [q, setQ] = useState('')
+
+  // Bookings made from the Book popup (replace with API data later)
+  const [bookings, setBookings] = useState<Booking[]>([])
+
+  // Facility open in the View / Manage / Book / Delete popup (null = closed)
+  const [viewing, setViewing] = useState<Facility | null>(null)
+  const [managing, setManaging] = useState<Facility | null>(null)
+  const [booking, setBooking] = useState<Facility | null>(null)
+  const [deleting, setDeleting] = useState<Facility | null>(null)
+  // Small success message after an action
+  const [toast, setToast] = useState('')
+
+  // Hide the success message after 3 seconds
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(''), 3000)
+    return () => clearTimeout(t)
+  }, [toast])
 
   // Add the new facility card from the modal
   function handleSave(f: FacilityPayload) {
@@ -128,6 +769,30 @@ export default function FacilitiesPage() {
       img: f.image ? URL.createObjectURL(f.image) : '',
     }
     setItems((prev) => [newFacility, ...prev])
+  }
+
+  // Manage: save the changed details (replace with an API call later)
+  const handleManage = (updated: Facility) => {
+    setItems((prev) => prev.map((f) => (f.id === updated.id ? updated : f)))
+    setToast(`"${updated.name}" updated`)
+    setManaging(null)
+  }
+
+  // Book: save the booking (replace with an API call later)
+  const handleBook = (data: Omit<Booking, 'id' | 'facilityId'>) => {
+    if (!booking) return
+    setBookings((prev) => [{ id: Date.now(), facilityId: booking.id, ...data }, ...prev])
+    setToast(`${booking.name} booked for ${fmtDate(data.date)}`)
+    setBooking(null)
+  }
+
+  // Delete: removes the facility (replace with an API call later)
+  const handleDelete = () => {
+    if (!deleting) return
+    setItems((prev) => prev.filter((f) => f.id !== deleting.id))
+    setBookings((prev) => prev.filter((b) => b.facilityId !== deleting.id))
+    setToast(`"${deleting.name}" deleted`)
+    setDeleting(null)
   }
 
   const list = useMemo(() => {
@@ -197,20 +862,18 @@ export default function FacilitiesPage() {
         ))}
       </motion.div>
 
-      {/* Cards */}
-      <motion.div
-        variants={container}
-        initial="hidden"
-        whileInView="show"
-        viewport={VIEWPORT}
-        className="grid grid-cols-1 gap-4 min-[560px]:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
-      >
-        {list.map((f) => {
+      {/* Cards: plain div, every card animates by itself (fixes cards staying hidden after a tab change) */}
+      <div className="grid grid-cols-1 gap-4 min-[560px]:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        {list.map((f, i) => {
           const Icon = f.icon
           return (
             <motion.div
               key={f.id}
-              variants={item}
+              custom={i}
+              variants={cardItem}
+              initial="hidden"
+              whileInView="show"
+              viewport={VIEWPORT}
               className="overflow-hidden rounded-xl border border-[#272D39] bg-[#10131A]"
             >
               {/* IMAGE: facility photo (icon placeholder if there is no image) */}
@@ -266,22 +929,28 @@ export default function FacilitiesPage() {
 
                 {/* Actions */}
                 <div className="mt-4 grid grid-cols-3 gap-2">
+                  {/* View: opens the details popup */}
                   <button
                     type="button"
-                    className="rounded-md border border-[#272D39] bg-white/[0.03] py-1.5 text-[10px] font-medium text-slate-300 hover:bg-white/5"
+                    onClick={() => setViewing(f)}
+                    className="cursor-pointer rounded-md border border-[#272D39] bg-white/[0.03] py-1.5 text-[10px] font-medium text-slate-300 hover:bg-white/5"
                   >
                     View
                   </button>
+                  {/* Manage: opens the edit / delete popup */}
                   <button
                     type="button"
-                    className="rounded-md border border-[#272D39] bg-white/[0.03] py-1.5 text-[10px] font-medium text-slate-300 hover:bg-white/5"
+                    onClick={() => setManaging(f)}
+                    className="cursor-pointer rounded-md border border-[#272D39] bg-white/[0.03] py-1.5 text-[10px] font-medium text-slate-300 hover:bg-white/5"
                   >
                     Manage
                   </button>
+                  {/* Book: opens the booking popup */}
                   <button
                     type="button"
+                    onClick={() => setBooking(f)}
                     disabled={f.status === 'Maintenance' || f.status === 'Unavailable'}
-                    className="rounded-md bg-gradient-to-r from-[#6C63FF] to-[#4DA3FF] py-1.5 text-[10px] font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="cursor-pointer rounded-md bg-gradient-to-r from-[#6C63FF] to-[#4DA3FF] py-1.5 text-[10px] font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Book
                   </button>
@@ -297,7 +966,7 @@ export default function FacilitiesPage() {
             No facilities found.
           </div>
         )}
-      </motion.div>
+      </div>
 
       {/* Add Facility modal */}
       <AddFacilityModal
@@ -305,6 +974,74 @@ export default function FacilitiesPage() {
         onClose={() => setShowFacilityModal(false)}
         onSave={handleSave}
       />
+
+      {/* View Details popup */}
+      <AnimatePresence>
+        {viewing && (
+          <ViewFacilityModal
+            key={viewing.id}
+            record={viewing}
+            bookingCount={bookings.filter((b) => b.facilityId === viewing.id).length}
+            onClose={() => setViewing(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Manage popup */}
+      <AnimatePresence>
+        {managing && (
+          <ManageFacilityModal
+            key={managing.id}
+            record={managing}
+            onClose={() => setManaging(null)}
+            onSubmit={handleManage}
+            onDelete={() => {
+              setDeleting(managing)
+              setManaging(null)
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Book popup */}
+      <AnimatePresence>
+        {booking && (
+          <BookFacilityModal
+            key={booking.id}
+            record={booking}
+            onClose={() => setBooking(null)}
+            onSubmit={handleBook}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete confirm popup */}
+      <AnimatePresence>
+        {deleting && (
+          <DeleteFacilityConfirm
+            key={deleting.id}
+            record={deleting}
+            onClose={() => setDeleting(null)}
+            onConfirm={handleDelete}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Success message */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="fixed right-4 top-20 z-80 flex max-w-[90vw] items-center gap-2 rounded-lg border border-emerald-500/30 bg-[#10131A] px-4 py-3 text-xs text-emerald-400 shadow-xl"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

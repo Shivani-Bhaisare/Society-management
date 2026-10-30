@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react' // NEW
-import Link from 'next/link'
-import { motion, type Variants } from 'framer-motion'
+import { useEffect, useState } from 'react' // NEW
+import { AnimatePresence, motion, type Variants } from 'framer-motion'
 import {
-  Plus, ChevronDown, Download, TrendingUp, TrendingDown, Wallet, Receipt, MoreHorizontal,
+  Plus, ChevronDown, Download, TrendingUp, TrendingDown, Wallet, Receipt,
+  CheckCircle2, X,
 } from 'lucide-react'
 import { Card, Badge } from '@/Components/ui'
 import AddTransactionModal from '@/Components/AddTransactionModal' // NEW
@@ -77,6 +77,15 @@ const txns = [
   { d: '04 Oct 2026', t: 'Hall Booking', c: 'Income', a: '₹ 8,000', ty: 'Credit', tyt: 'green' },
 ] as const
 
+// One transaction row
+type Txn = (typeof txns)[number]
+
+// Which popup is open (null = none)
+type ModalState =
+  | { type: 'view'; txn: Txn }
+  | { type: 'all' }
+  | null
+
 // Shared table header / cell styles (same as dashboard)
 const th = 'bg-white/[0.04] px-2 py-2 font-medium first:rounded-l-md last:rounded-r-md'
 const td = 'border-t border-[#272D39] px-2 py-2.5'
@@ -93,10 +102,264 @@ const donut = (() => {
     .join(', ')
 })()
 
+/* ---------- Helpers ---------- */
+
+// "₹ 45,000" -> 45000
+const amountOf = (a: string) => Number(a.replace(/[^\d]/g, '')) || 0
+
+// 45000 -> "₹ 45,000" (Indian digit grouping)
+const fmtAmount = (n: number) => `₹ ${n.toLocaleString('en-IN')}`
+
+// Today's date as "YYYY-MM-DD" (used in the file name)
+const todayStr = () => {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+// Download the given transactions as a CSV file (opens in Excel)
+const downloadCsv = (rows: readonly Txn[]) => {
+  // Wrap every value in quotes and escape quotes inside it
+  const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
+  const header = ['Date', 'Description', 'Category', 'Amount', 'Type']
+  const lines = rows.map((x) => [x.d, x.t, x.c, x.a, x.ty].map(esc).join(','))
+  const csv = [header.map(esc).join(','), ...lines].join('\r\n')
+
+  // The BOM at the start makes Excel show the ₹ sign correctly
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `accounting-transactions-${todayStr()}.csv`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+/* ---------- Shared popup parts ---------- */
+
+// Popup shell: dark overlay + panel + header + close button (Esc and outside click also close it)
+function Modal({
+  title,
+  sub,
+  onClose,
+  width = 'max-w-md',
+  children,
+}: {
+  title: string
+  sub?: string
+  onClose: () => void
+  width?: string
+  children: React.ReactNode
+}) {
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className={`flex max-h-[90vh] w-full ${width} flex-col rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl`}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-base font-bold">{title}</h2>
+            {sub && <p className="truncate text-[11px] text-slate-400">{sub}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Content (scrolls when long) */}
+        <div className="mt-4 min-h-0 flex-1 overflow-y-auto">{children}</div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+// Single Close button used at the bottom of the popups
+function CloseRow({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="mt-4 flex justify-end">
+      <button
+        type="button"
+        onClick={onClose}
+        className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+      >
+        Close
+      </button>
+    </div>
+  )
+}
+
+// One detail row (label on the left, value on the right)
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-[#272D39] py-2 text-[11px] first:border-t-0">
+      <span className="shrink-0 text-slate-400">{label}</span>
+      <span className="text-right font-medium text-slate-200">{value}</span>
+    </div>
+  )
+}
+
+/* ---------- View Details popup ---------- */
+
+function ViewTxnModal({ txn, onClose }: { txn: Txn; onClose: () => void }) {
+  return (
+    <Modal title="Transaction Details" sub={txn.t} onClose={onClose} width="max-w-sm">
+      {/* Type */}
+      <div className="flex items-center justify-between rounded-lg border border-[#272D39] bg-white/3 px-3 py-2">
+        <span className="text-[11px] text-slate-400">Type</span>
+        <Badge tone={txn.tyt}>{txn.ty}</Badge>
+      </div>
+
+      {/* Details */}
+      <div className="mt-2 rounded-lg border border-[#272D39] bg-white/3 px-3">
+        <DetailRow label="Description" value={txn.t} />
+        <DetailRow label="Category" value={txn.c} />
+        <DetailRow label="Date" value={txn.d} />
+        <DetailRow label="Amount" value={txn.a} />
+      </div>
+
+      <CloseRow onClose={onClose} />
+    </Modal>
+  )
+}
+
+/* ---------- View All popup ---------- */
+
+function AllTxnsModal({
+  items,
+  onClose,
+  onView,
+}: {
+  items: readonly Txn[]
+  onClose: () => void
+  onView: (t: Txn) => void
+}) {
+  // Totals shown at the top of the popup
+  const credit = items.filter((x) => x.ty === 'Credit').reduce((s, x) => s + amountOf(x.a), 0)
+  const debit = items.filter((x) => x.ty === 'Debit').reduce((s, x) => s + amountOf(x.a), 0)
+
+  return (
+    <Modal title="All Transactions" sub={`${items.length} transactions`} onClose={onClose} width="max-w-3xl">
+      {/* Totals */}
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <div className="flex items-center justify-between rounded-lg border border-[#272D39] bg-white/3 px-3 py-2">
+          <span className="text-[11px] text-slate-400">Total Credit</span>
+          <span className="text-xs font-semibold text-emerald-400">{fmtAmount(credit)}</span>
+        </div>
+        <div className="flex items-center justify-between rounded-lg border border-[#272D39] bg-white/3 px-3 py-2">
+          <span className="text-[11px] text-slate-400">Total Debit</span>
+          <span className="text-xs font-semibold text-red-400">{fmtAmount(debit)}</span>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] text-left text-[11px]">
+          <thead className="text-slate-400">
+            <tr>
+              <th className={th}>Date</th>
+              <th className={th}>Description</th>
+              <th className={th}>Category</th>
+              <th className={th}>Amount</th>
+              <th className={th}>Type</th>
+              <th className={th} />
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((x) => (
+              <tr key={`${x.d}-${x.t}`}>
+                <td className={`${td} text-slate-400`}>{x.d}</td>
+                <td className={`${td} font-medium`}>{x.t}</td>
+                <td className={`${td} text-slate-400`}>{x.c}</td>
+                <td className={`${td} font-medium`}>{x.a}</td>
+                <td className={td}><Badge tone={x.tyt}>{x.ty}</Badge></td>
+                <td className={td}>
+                  {/* View: opens the transaction details popup */}
+                  <button
+                    type="button"
+                    onClick={() => onView(x)}
+                    className="cursor-pointer rounded-md border border-[#272D39] px-2.5 py-1 text-[10px] text-slate-300 hover:bg-white/5"
+                  >
+                    View
+                  </button>
+                </td>
+              </tr>
+            ))}
+
+            {/* Empty state */}
+            {items.length === 0 && (
+              <tr>
+                <td colSpan={6} className={`${td} py-8 text-center text-slate-500`}>
+                  No transactions found
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <CloseRow onClose={onClose} />
+    </Modal>
+  )
+}
+
 /* ---------- Page ---------- */
 export default function AccountingPage() {
   // NEW: controls the Add Transaction drawer
   const [openTxn, setOpenTxn] = useState(false)
+
+  // Popup that is open (null = closed)
+  const [modal, setModal] = useState<ModalState>(null)
+  const close = () => setModal(null)
+
+  // Small success message after an action
+  const [toast, setToast] = useState('')
+
+  // Hide the success message after 3 seconds
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(''), 3000)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  // Export: download the transactions as a CSV file (replace with an API / server export later)
+  const handleExport = () => {
+    if (txns.length === 0) {
+      setToast('No transactions to export')
+      return
+    }
+    downloadCsv(txns)
+    setToast(`${txns.length} transactions exported`)
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
@@ -153,11 +416,12 @@ export default function AccountingPage() {
           <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
         </motion.div>
 
-        {/* Export */}
+        {/* Export: downloads the transactions as a CSV file */}
         <motion.button
           variants={item}
           type="button"
-          className="flex items-center justify-center gap-2 rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-300 hover:bg-white/5"
+          onClick={handleExport}
+          className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-300 hover:bg-white/5"
         >
           <Download className="h-4 w-4" /> Export
         </motion.button>
@@ -275,7 +539,16 @@ export default function AccountingPage() {
       >
         <Card
           title="Recent Transactions" sub="Latest income and expense entries"
-          action={<Link href="/secretary/accounting/transactions" className="text-[11px] text-[#A29CFF] hover:underline">View All</Link>}
+          action={
+            // View All: opens the all transactions popup
+            <button
+              type="button"
+              onClick={() => setModal({ type: 'all' })}
+              className="cursor-pointer text-[11px] text-[#A29CFF] hover:underline"
+            >
+              View All
+            </button>
+          }
         >
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-left text-[11px]">
@@ -298,8 +571,14 @@ export default function AccountingPage() {
                     <td className={`${td} font-medium`}>{x.a}</td>
                     <td className={td}><Badge tone={x.tyt}>{x.ty}</Badge></td>
                     <td className={td}>
-                      <button type="button" aria-label="More actions" className="text-slate-500 hover:text-slate-300">
-                        <MoreHorizontal className="h-4 w-4" />
+                      {/* View: opens the transaction details popup */}
+                      <button
+                        type="button"
+                        aria-label={`View details of ${x.t}`}
+                        onClick={() => setModal({ type: 'view', txn: x })}
+                        className="cursor-pointer rounded-md border border-[#272D39] px-2.5 py-1 text-[10px] text-slate-300 hover:bg-white/5"
+                      >
+                        View
                       </button>
                     </td>
                   </tr>
@@ -318,6 +597,42 @@ export default function AccountingPage() {
           console.log('New transaction:', data) // TODO: add the API call here
         }}
       />
+
+      {/* Popups */}
+      <AnimatePresence>
+        {modal?.type === 'view' && (
+          <ViewTxnModal
+            key={`view-${modal.txn.d}-${modal.txn.t}`}
+            txn={modal.txn}
+            onClose={close}
+          />
+        )}
+
+        {modal?.type === 'all' && (
+          <AllTxnsModal
+            key="all-txns"
+            items={txns}
+            onClose={close}
+            onView={(t) => setModal({ type: 'view', txn: t })}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Success message */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="fixed right-4 top-20 z-80 flex max-w-[90vw] items-center gap-2 rounded-lg border border-emerald-500/30 bg-[#10131A] px-4 py-3 text-xs text-emerald-400 shadow-xl"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

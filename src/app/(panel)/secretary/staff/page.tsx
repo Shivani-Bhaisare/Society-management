@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { motion, type Variants } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   Search,
   Plus,
@@ -13,6 +13,9 @@ import {
   Briefcase,
   CalendarX,
   ChevronDown,
+  CheckCircle2,
+  Trash2,
+  X,
 } from "lucide-react";
 import { Card, Badge } from "@/Components/ui";
 import AddStaffModal, { type StaffPayload } from "@/Components/AddStaffModal";
@@ -144,12 +147,29 @@ const initials = (name: string) =>
     .map((w) => w[0]?.toUpperCase())
     .join("") || "ST";
 
+// "98765 43210" -> "9876543210" (digits only, used in the Edit popup)
+const phoneDigits = (v: string) => v.replace(/\D/g, "");
+
+// "9876543210" -> "98765 43210" (format used in the table)
+const formatPhone = (digits: string) =>
+  `${digits.slice(0, 5)} ${digits.slice(5)}`;
+
 /* ---------- Small pieces ---------- */
 /* IMAGE: staff photo (32x32). Shows initials if there is no photo */
-function Avatar({ src, name }: { src: string; name: string }) {
+function Avatar({
+  src,
+  name,
+  size = "h-8 w-8",
+}: {
+  src: string;
+  name: string;
+  size?: string;
+}) {
   if (!src) {
     return (
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#272D39] bg-[#6C63FF]/25 text-[10px] font-bold text-[#A29CFF]">
+      <span
+        className={`flex ${size} shrink-0 items-center justify-center rounded-full border border-[#272D39] bg-[#6C63FF]/25 text-[10px] font-bold text-[#A29CFF]`}
+      >
         {initials(name)}
       </span>
     );
@@ -158,9 +178,7 @@ function Avatar({ src, name }: { src: string; name: string }) {
     <img
       src={src}
       alt={name}
-      width={32}
-      height={32}
-      className="h-8 w-8 shrink-0 rounded-full border border-[#272D39] object-cover"
+      className={`${size} shrink-0 rounded-full border border-[#272D39] object-cover`}
     />
   );
 }
@@ -198,31 +216,422 @@ function Select({
   );
 }
 
-function Actions() {
+// Row actions: View, Edit and the 3-dot menu button (handlers come from the page)
+function Actions({
+  row,
+  menuOpen,
+  onView,
+  onEdit,
+  onMore,
+}: {
+  row: StaffRow;
+  menuOpen: boolean;
+  onView: (r: StaffRow) => void;
+  onEdit: (r: StaffRow) => void;
+  onMore: (e: React.MouseEvent<HTMLButtonElement>, r: StaffRow) => void;
+}) {
   return (
     <div className="flex items-center gap-0.5 text-slate-400">
       <button
         type="button"
         aria-label="View"
-        className="rounded-md p-1.5 hover:bg-white/5 hover:text-white"
+        title="View"
+        onClick={() => onView(row)}
+        className="cursor-pointer rounded-md p-1.5 hover:bg-white/5 hover:text-white"
       >
         <Eye className="h-3.5 w-3.5" />
       </button>
       <button
         type="button"
         aria-label="Edit"
-        className="rounded-md p-1.5 hover:bg-white/5 hover:text-white"
+        title="Edit"
+        onClick={() => onEdit(row)}
+        className="cursor-pointer rounded-md p-1.5 hover:bg-white/5 hover:text-white"
       >
         <Pencil className="h-3.5 w-3.5" />
       </button>
       <button
         type="button"
         aria-label="More"
-        className="rounded-md p-1.5 hover:bg-white/5 hover:text-white"
+        title="More"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        onClick={(e) => onMore(e, row)}
+        className={`cursor-pointer rounded-md p-1.5 hover:bg-white/5 hover:text-white ${
+          menuOpen ? "bg-white/5 text-white" : ""
+        }`}
       >
         <EllipsisVertical className="h-3.5 w-3.5" />
       </button>
     </div>
+  );
+}
+
+/* ---------- View Staff popup ---------- */
+
+// One detail row (label on the left, value on the right)
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-[#272D39] py-2 text-[11px] first:border-t-0">
+      <span className="text-slate-400">{label}</span>
+      <span className="text-right font-medium text-slate-200">{value}</span>
+    </div>
+  );
+}
+
+function ViewStaffModal({
+  record,
+  onClose,
+}: {
+  record: StaffRow;
+  onClose: () => void;
+}) {
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-4 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar src={record.img} name={record.name} size="h-11 w-11" />
+            <div className="min-w-0">
+              <h2 className="truncate text-sm font-bold">{record.name}</h2>
+              <p className="truncate text-[11px] text-slate-400">{record.role}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Status */}
+        <div className="mt-3 flex items-center justify-between rounded-lg border border-[#272D39] bg-white/3 px-3 py-2">
+          <span className="text-[11px] text-slate-400">Status</span>
+          <Badge tone={statusTone[record.status]}>{record.status}</Badge>
+        </div>
+
+        {/* Details */}
+        <div className="mt-2 rounded-lg border border-[#272D39] bg-white/3 px-3">
+          <DetailRow label="Staff ID" value={`#${record.id}`} />
+          <DetailRow label="Role" value={record.role} />
+          <DetailRow label="Department" value={record.dept} />
+          <DetailRow label="Shift" value={record.shift} />
+          <DetailRow label="Contact" value={record.phone} />
+        </div>
+
+        {/* Actions */}
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Close
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ---------- Edit Staff popup ---------- */
+
+function EditStaffModal({
+  record,
+  onClose,
+  onSubmit,
+}: {
+  record: StaffRow;
+  onClose: () => void;
+  onSubmit: (updated: StaffRow) => void;
+}) {
+  const [name, setName] = useState(record.name);
+  const [role, setRole] = useState(record.role);
+  const [dept, setDept] = useState<Dept>(record.dept);
+  const [shift, setShift] = useState<Shift>(record.shift);
+  const [phone, setPhone] = useState(phoneDigits(record.phone));
+  const [status, setStatus] = useState<State>(record.status);
+  const [error, setError] = useState("");
+
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  // Validate the form and send the updated row back to the page
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (name.trim().length < 2) {
+      setError("Name must be at least 2 characters.");
+      return;
+    }
+    if (role.trim().length < 2) {
+      setError("Role must be at least 2 characters.");
+      return;
+    }
+    if (phone.length !== 10) {
+      setError("Phone number must be 10 digits.");
+      return;
+    }
+
+    onSubmit({
+      ...record,
+      name: name.trim(),
+      role: role.trim(),
+      dept,
+      shift,
+      phone: formatPhone(phone),
+      status,
+    });
+  };
+
+  // Small select used inside this popup (label + custom chevron)
+  const popupSelect = (
+    label: string,
+    value: string,
+    onChange: (v: string) => void,
+    options: readonly string[],
+  ) => (
+    <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+      {label}
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${field} cursor-pointer`}
+        >
+          {options.map((o) => (
+            <option key={o} value={o} className="bg-[#10131A]">
+              {o}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+      </div>
+    </label>
+  );
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold">Edit Staff</h2>
+            <p className="text-[11px] text-slate-400">
+              Update the details of {record.name}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Form fields */}
+        <div className="mt-4 flex flex-col gap-3">
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Full Name
+            <input
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setError("");
+              }}
+              className={`${field} pr-3`}
+              autoFocus
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Role
+              <input
+                value={role}
+                onChange={(e) => {
+                  setRole(e.target.value);
+                  setError("");
+                }}
+                className={`${field} pr-3`}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Phone Number
+              <input
+                value={phone}
+                inputMode="numeric"
+                maxLength={10}
+                onChange={(e) => {
+                  setPhone(phoneDigits(e.target.value));
+                  setError("");
+                }}
+                placeholder="10 digit number"
+                className={`${field} pr-3`}
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {popupSelect("Department", dept, (v) => setDept(v as Dept), depts)}
+            {popupSelect("Shift", shift, (v) => setShift(v as Shift), shifts)}
+          </div>
+
+          {popupSelect("Status", status, (v) => setStatus(v as State), states)}
+
+          {error && <p className="text-[11px] text-red-400">{error}</p>}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="cursor-pointer rounded-lg bg-linear-to-r from-[#6C63FF] to-[#4DA3FF] px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90 active:scale-95"
+          >
+            Save Changes
+          </button>
+        </div>
+      </motion.form>
+    </motion.div>
+  );
+}
+
+/* ---------- Delete confirm popup ---------- */
+
+function DeleteStaffConfirm({
+  record,
+  onClose,
+  onConfirm,
+}: {
+  record: StaffRow;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="w-full max-w-sm rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/15 text-red-400">
+            <Trash2 className="h-4 w-4" />
+          </span>
+          <div>
+            <h2 className="text-base font-bold">Delete Staff</h2>
+            <p className="text-[11px] text-slate-400">
+              This action cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        <p className="mt-4 text-xs text-slate-300">
+          Are you sure you want to delete{" "}
+          <span className="font-semibold text-white">{record.name}</span>?
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="cursor-pointer rounded-lg bg-red-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-red-600 active:scale-95"
+          >
+            Delete
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -235,6 +644,42 @@ export default function StaffPage() {
   const [dept, setDept] = useState("All");
   const [shift, setShift] = useState("All");
   const [status, setStatus] = useState("All");
+
+  // 3-dot menu: which row is open and where to show it on the screen
+  const [menu, setMenu] = useState<{
+    id: number;
+    right: number;
+    top?: number;
+    bottom?: number;
+  } | null>(null);
+  // Staff member open in the View / Edit / Delete popup (null = closed)
+  const [viewing, setViewing] = useState<StaffRow | null>(null);
+  const [editing, setEditing] = useState<StaffRow | null>(null);
+  const [deleting, setDeleting] = useState<StaffRow | null>(null);
+  // Small success message after an action
+  const [toast, setToast] = useState("");
+
+  // Hide the success message after 3 seconds
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // Close the 3-dot menu on Esc, scroll or window resize
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [menu]);
 
   // Add the new staff member from the modal to the list
   function handleSave(p: StaffPayload) {
@@ -254,6 +699,50 @@ export default function StaffPage() {
     // TODO: add the API call here (along with the p.photo / p.idFile upload)
     console.log("New staff:", p);
   }
+
+  // Opens the 3-dot menu next to the clicked button (flips up near the bottom)
+  const openMenu = (e: React.MouseEvent<HTMLButtonElement>, r: StaffRow) => {
+    if (menu?.id === r.id) {
+      setMenu(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const right = window.innerWidth - rect.right;
+    const spaceBelow = window.innerHeight - rect.bottom;
+
+    if (spaceBelow < 200) {
+      setMenu({ id: r.id, right, bottom: window.innerHeight - rect.top + 4 });
+    } else {
+      setMenu({ id: r.id, right, top: rect.bottom + 4 });
+    }
+  };
+
+  // The staff member whose 3-dot menu is open
+  const menuStaff = staff.find((s) => s.id === menu?.id) ?? null;
+
+  // Edit: save the changed details (replace with an API call later)
+  const handleEdit = (updated: StaffRow) => {
+    setStaff((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    setToast(`${updated.name} updated`);
+    setEditing(null);
+  };
+
+  // Mark as: changes only the status (replace with an API call later)
+  const changeStatus = (s: StaffRow, next: State) => {
+    setStaff((prev) =>
+      prev.map((x) => (x.id === s.id ? { ...x, status: next } : x)),
+    );
+    setToast(`${s.name} is now ${next}`);
+    setMenu(null);
+  };
+
+  // Delete: removes the staff member (replace with an API call later)
+  const handleDelete = () => {
+    if (!deleting) return;
+    setStaff((prev) => prev.filter((s) => s.id !== deleting.id));
+    setToast(`${deleting.name} deleted`);
+    setDeleting(null);
+  };
 
   // Stat cards: demo numbers + newly added staff (remove this once the API is in place)
   const stats = useMemo(() => {
@@ -431,7 +920,13 @@ export default function StaffPage() {
                       <Badge tone={statusTone[s.status]}>{s.status}</Badge>
                     </td>
                     <td className={td}>
-                      <Actions />
+                      <Actions
+                        row={s}
+                        menuOpen={menu?.id === s.id}
+                        onView={setViewing}
+                        onEdit={setEditing}
+                        onMore={openMenu}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -483,7 +978,13 @@ export default function StaffPage() {
             </dl>
 
             <div className="mt-3 flex justify-end border-t border-[#272D39] pt-2">
-              <Actions />
+              <Actions
+                row={s}
+                menuOpen={menu?.id === s.id}
+                onView={setViewing}
+                onEdit={setEditing}
+                onMore={openMenu}
+              />
             </div>
           </motion.div>
         ))}
@@ -502,6 +1003,107 @@ export default function StaffPage() {
         onClose={() => setShowStaffModal(false)}
         onSave={handleSave}
       />
+
+      {/* 3-dot menu (fixed position, so the table scroll area never cuts it) */}
+      <AnimatePresence>
+        {menu && menuStaff && (
+          <>
+            {/* Invisible layer: click anywhere outside to close the menu */}
+            <div
+              className="fixed inset-0 z-60"
+              onClick={() => setMenu(null)}
+              aria-hidden="true"
+            />
+            <motion.div
+              role="menu"
+              initial={{ opacity: 0, scale: 0.95, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -4 }}
+              transition={{ duration: 0.15, ease: EASE }}
+              style={{ top: menu.top, bottom: menu.bottom, right: menu.right }}
+              className="fixed z-70 w-48 origin-top-right overflow-hidden rounded-lg border border-[#272D39] bg-[#10131A] p-1 text-xs shadow-2xl"
+            >
+              {/* Mark as: only the statuses this staff member does not have yet */}
+              {states
+                .filter((st) => st !== menuStaff.status)
+                .map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => changeStatus(menuStaff, st)}
+                    className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-slate-300 transition hover:bg-white/5 hover:text-white"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Mark as {st}
+                  </button>
+                ))}
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setDeleting(menuStaff);
+                  setMenu(null);
+                }}
+                className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-red-400 transition hover:bg-red-500/10"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* View popup */}
+      <AnimatePresence>
+        {viewing && (
+          <ViewStaffModal
+            key={viewing.id}
+            record={viewing}
+            onClose={() => setViewing(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Edit popup */}
+      <AnimatePresence>
+        {editing && (
+          <EditStaffModal
+            key={editing.id}
+            record={editing}
+            onClose={() => setEditing(null)}
+            onSubmit={handleEdit}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete confirm popup */}
+      <AnimatePresence>
+        {deleting && (
+          <DeleteStaffConfirm
+            key={deleting.id}
+            record={deleting}
+            onClose={() => setDeleting(null)}
+            onConfirm={handleDelete}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Success message */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="fixed right-4 top-20 z-80 flex max-w-[90vw] items-center gap-2 rounded-lg border border-emerald-500/30 bg-[#10131A] px-4 py-3 text-xs text-emerald-400 shadow-xl"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

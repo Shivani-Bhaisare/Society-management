@@ -1,10 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import Link from 'next/link'
-import { motion, type Variants } from 'framer-motion'
+import { useEffect, useState } from 'react'
+import { AnimatePresence, motion, type Variants } from 'framer-motion'
 import {
-  Plus, ChevronDown, Download, FileText, CheckCircle2, Hourglass, AlarmClock,
+  Plus, ChevronDown, Download, FileText, CheckCircle2, Hourglass, AlarmClock, X,
 } from 'lucide-react'
 import { Card, Badge } from '@/Components/ui'
 import GenerateBillsModal from '@/Components/GenerateBillsModal'
@@ -75,6 +74,15 @@ const bills = [
   { f: 'B-305', n: 'Sneha Gupta', b: 'OCT26-305', d: '10 Oct 2026', a: '₹ 4,500', s: 'Paid', st: 'green' },
 ] as const
 
+// One bill row
+type Bill = (typeof bills)[number]
+
+// Which popup is open (null = none)
+type ModalState =
+  | { type: 'view'; bill: Bill }
+  | { type: 'all' }
+  | null
+
 // Shared table header / cell styles (same as dashboard)
 const th = 'bg-white/[0.04] px-2 py-2 font-medium first:rounded-l-md last:rounded-r-md'
 const td = 'border-t border-[#272D39] px-2 py-2.5'
@@ -91,10 +99,245 @@ const donut = (() => {
     .join(', ')
 })()
 
+/* ---------- Export helper ---------- */
+
+// Today's date as "YYYY-MM-DD" (used in the file name)
+const todayStr = () => {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+// Download the given bills as a CSV file (opens in Excel)
+const downloadCsv = (rows: readonly Bill[]) => {
+  // Wrap every value in quotes and escape quotes inside it
+  const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
+  const header = ['Flat No.', 'Resident Name', 'Bill No.', 'Due Date', 'Amount', 'Status']
+  const lines = rows.map((x) => [x.f, x.n, x.b, x.d, x.a, x.s].map(esc).join(','))
+  const csv = [header.map(esc).join(','), ...lines].join('\r\n')
+
+  // The BOM at the start makes Excel show the ₹ sign correctly
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `maintenance-bills-${todayStr()}.csv`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+/* ---------- Shared popup parts ---------- */
+
+// Popup shell: dark overlay + panel + header + close button (Esc and outside click also close it)
+function Modal({
+  title,
+  sub,
+  onClose,
+  width = 'max-w-md',
+  children,
+}: {
+  title: string
+  sub?: string
+  onClose: () => void
+  width?: string
+  children: React.ReactNode
+}) {
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className={`flex max-h-[90vh] w-full ${width} flex-col rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl`}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-base font-bold">{title}</h2>
+            {sub && <p className="truncate text-[11px] text-slate-400">{sub}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Content (scrolls when long) */}
+        <div className="mt-4 min-h-0 flex-1 overflow-y-auto">{children}</div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+// Single Close button used at the bottom of the popups
+function CloseRow({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="mt-4 flex justify-end">
+      <button
+        type="button"
+        onClick={onClose}
+        className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+      >
+        Close
+      </button>
+    </div>
+  )
+}
+
+// One detail row (label on the left, value on the right)
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-[#272D39] py-2 text-[11px] first:border-t-0">
+      <span className="shrink-0 text-slate-400">{label}</span>
+      <span className="text-right font-medium text-slate-200">{value}</span>
+    </div>
+  )
+}
+
+/* ---------- View Details popup ---------- */
+
+function ViewBillModal({ bill, onClose }: { bill: Bill; onClose: () => void }) {
+  return (
+    <Modal title="Bill Details" sub={bill.b} onClose={onClose} width="max-w-sm">
+      {/* Status */}
+      <div className="flex items-center justify-between rounded-lg border border-[#272D39] bg-white/3 px-3 py-2">
+        <span className="text-[11px] text-slate-400">Status</span>
+        <Badge tone={bill.st}>{bill.s}</Badge>
+      </div>
+
+      {/* Details */}
+      <div className="mt-2 rounded-lg border border-[#272D39] bg-white/3 px-3">
+        <DetailRow label="Bill No." value={bill.b} />
+        <DetailRow label="Resident Name" value={bill.n} />
+        <DetailRow label="Flat No." value={bill.f} />
+        <DetailRow label="Due Date" value={bill.d} />
+        <DetailRow label="Amount" value={bill.a} />
+      </div>
+
+      <CloseRow onClose={onClose} />
+    </Modal>
+  )
+}
+
+/* ---------- View All popup ---------- */
+
+function AllBillsModal({
+  items,
+  onClose,
+  onView,
+}: {
+  items: readonly Bill[]
+  onClose: () => void
+  onView: (b: Bill) => void
+}) {
+  return (
+    <Modal title="All Maintenance Bills" sub={`${items.length} bills`} onClose={onClose} width="max-w-3xl">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-left text-[11px]">
+          <thead className="text-slate-400">
+            <tr>
+              <th className={th}>Flat No.</th>
+              <th className={th}>Resident Name</th>
+              <th className={th}>Bill No.</th>
+              <th className={th}>Due Date</th>
+              <th className={th}>Amount</th>
+              <th className={th}>Status</th>
+              <th className={th}>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((x) => (
+              <tr key={x.b}>
+                <td className={`${td} text-slate-400`}>{x.f}</td>
+                <td className={`${td} font-medium`}>{x.n}</td>
+                <td className={`${td} text-slate-400`}>{x.b}</td>
+                <td className={`${td} text-slate-400`}>{x.d}</td>
+                <td className={`${td} font-medium`}>{x.a}</td>
+                <td className={td}><Badge tone={x.st}>{x.s}</Badge></td>
+                <td className={td}>
+                  {/* View: opens the bill details popup */}
+                  <button
+                    type="button"
+                    onClick={() => onView(x)}
+                    className="cursor-pointer rounded-md border border-[#272D39] px-2.5 py-1 text-[10px] text-slate-300 hover:bg-white/5"
+                  >
+                    View
+                  </button>
+                </td>
+              </tr>
+            ))}
+
+            {/* Empty state */}
+            {items.length === 0 && (
+              <tr>
+                <td colSpan={7} className={`${td} py-8 text-center text-slate-500`}>
+                  No bills found
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <CloseRow onClose={onClose} />
+    </Modal>
+  )
+}
+
 /* ---------- Page ---------- */
 export default function MaintenanceBillingPage() {
   // Controls the Generate Bills modal
   const [openGenerate, setOpenGenerate] = useState(false)
+
+  // Popup that is open (null = closed)
+  const [modal, setModal] = useState<ModalState>(null)
+  const close = () => setModal(null)
+
+  // Small success message after an action
+  const [toast, setToast] = useState('')
+
+  // Hide the success message after 3 seconds
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(''), 3000)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  // Export: download the bills as a CSV file (replace with an API / server export later)
+  const handleExport = () => {
+    if (bills.length === 0) {
+      setToast('No bills to export')
+      return
+    }
+    downloadCsv(bills)
+    setToast(`${bills.length} bills exported`)
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
@@ -162,11 +405,12 @@ export default function MaintenanceBillingPage() {
           <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
         </motion.div>
 
-        {/* Export */}
+        {/* Export: downloads the bills as a CSV file */}
         <motion.button
           variants={item}
           type="button"
-          className="flex items-center justify-center gap-2 rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-300 hover:bg-white/5"
+          onClick={handleExport}
+          className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-300 hover:bg-white/5"
         >
           <Download className="h-4 w-4" /> Export
         </motion.button>
@@ -284,7 +528,16 @@ export default function MaintenanceBillingPage() {
       >
         <Card
           title="Maintenance Bills" sub="Bills for the selected month"
-          action={<Link href="/secretary/billing/bills" className="text-[11px] text-[#A29CFF] hover:underline">View All</Link>}
+          action={
+            // View All: opens the all bills popup
+            <button
+              type="button"
+              onClick={() => setModal({ type: 'all' })}
+              className="cursor-pointer text-[11px] text-[#A29CFF] hover:underline"
+            >
+              View All
+            </button>
+          }
         >
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-[11px]">
@@ -309,12 +562,14 @@ export default function MaintenanceBillingPage() {
                     <td className={`${td} font-medium`}>{x.a}</td>
                     <td className={td}><Badge tone={x.st}>{x.s}</Badge></td>
                     <td className={td}>
-                      <Link
-                        href={`/secretary/billing/bills/${x.b}`}
-                        className="rounded-md border border-[#272D39] px-2.5 py-1 text-[10px] text-slate-300 hover:bg-white/5"
+                      {/* View: opens the bill details popup */}
+                      <button
+                        type="button"
+                        onClick={() => setModal({ type: 'view', bill: x })}
+                        className="cursor-pointer rounded-md border border-[#272D39] px-2.5 py-1 text-[10px] text-slate-300 hover:bg-white/5"
                       >
                         View
-                      </Link>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -332,6 +587,38 @@ export default function MaintenanceBillingPage() {
           console.log('Generate bills:', data) // TODO: add the API call here
         }}
       />
+
+      {/* Popups */}
+      <AnimatePresence>
+        {modal?.type === 'view' && (
+          <ViewBillModal key={`view-${modal.bill.b}`} bill={modal.bill} onClose={close} />
+        )}
+
+        {modal?.type === 'all' && (
+          <AllBillsModal
+            key="all-bills"
+            items={bills}
+            onClose={close}
+            onView={(b) => setModal({ type: 'view', bill: b })}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Success message */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="fixed right-4 top-20 z-80 flex max-w-[90vw] items-center gap-2 rounded-lg border border-emerald-500/30 bg-[#10131A] px-4 py-3 text-xs text-emerald-400 shadow-xl"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

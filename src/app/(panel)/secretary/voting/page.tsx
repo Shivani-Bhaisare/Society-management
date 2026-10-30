@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { motion, type Variants } from 'framer-motion'
-import { Plus, Vote, Users, Percent } from 'lucide-react'
+import { AnimatePresence, motion, type Variants } from 'framer-motion'
+import { Plus, Vote, Users, Percent, X } from 'lucide-react'
 import { Card, Badge } from '@/Components/ui'
 import AddPollModal from '@/Components/AddPollModal'
 
@@ -65,16 +65,217 @@ const recent = [
   { name: 'Neha Gupta', poll: 'Clubhouse Renovation', time: '6h ago', c: '#00C2B8' },
 ]
 
+// Full voting activity shown in the "View All" popup (placeholder data - replace with API data later)
+const allActivity = [
+  ...recent,
+  { name: 'Amit Singh', poll: 'Maintenance Fund Increase', time: '8h ago', c: '#F59E0B' },
+  { name: 'Sunita Patel', poll: 'Clubhouse Renovation', time: '10h ago', c: '#EC4899' },
+  { name: 'Vikram Joshi', poll: 'Parking Policy Change', time: '1d ago', c: '#3B82F6' },
+  { name: 'Anita Desai', poll: 'Maintenance Fund Increase', time: '1d ago', c: '#8B5CF6' },
+  { name: 'Rohit Mehta', poll: 'Clubhouse Renovation', time: '2d ago', c: '#00C2B8' },
+]
+
 // Helpers: avatar initials and vote percentage
 const initials = (n: string) => n.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
 const pct = (v: number) => Math.round((v / TOTAL_VOTERS) * 100)
 
 type Tab = 'active' | 'past'
 
+// Poll shown in the View popup (result is empty for active polls)
+type PollView = { id: number; title: string; sub: string; voted: number; result?: 'Passed' | 'Rejected' }
+
+/* ---------- View Poll popup ---------- */
+
+// One detail row (label on the left, value on the right)
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-[#272D39] py-2 text-[11px] first:border-t-0">
+      <span className="text-slate-400">{label}</span>
+      <span className="text-right font-medium text-slate-200">{value}</span>
+    </div>
+  )
+}
+
+function ViewPollModal({ poll, onClose }: { poll: PollView; onClose: () => void }) {
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  // Status label + badge colour (active polls have no result yet)
+  const statusLabel = poll.result ?? 'Active'
+  const statusTone = poll.result === 'Passed' ? 'green' : poll.result === 'Rejected' ? 'red' : 'blue'
+  const barColor =
+    poll.result === 'Passed' ? 'bg-emerald-500' : poll.result === 'Rejected' ? 'bg-red-500' : 'bg-gradient-to-r from-[#6C63FF] to-[#4DA3FF]'
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-4 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold">Poll Details</h2>
+            <p className="truncate text-[11px] text-slate-400">{poll.title}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Status */}
+        <div className="mt-3 flex items-center justify-between rounded-lg border border-[#272D39] bg-white/3 px-3 py-2">
+          <span className="text-[11px] text-slate-400">Status</span>
+          <Badge tone={statusTone}>{statusLabel}</Badge>
+        </div>
+
+        {/* Details */}
+        <div className="mt-2 rounded-lg border border-[#272D39] bg-white/3 px-3">
+          <DetailRow label="Poll No." value={`#${poll.id}`} />
+          <DetailRow label="Title" value={poll.title} />
+          <DetailRow label="Description" value={poll.sub} />
+          <DetailRow label="Total Voters" value={String(TOTAL_VOTERS)} />
+          <DetailRow label="Voted" value={String(poll.voted)} />
+          <DetailRow label="Not Voted" value={String(TOTAL_VOTERS - poll.voted)} />
+        </div>
+
+        {/* Participation progress */}
+        <div className="mt-2 rounded-lg border border-[#272D39] bg-white/3 px-3 py-3">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-slate-400">Participation</span>
+            <span className="font-semibold">{pct(poll.voted)}%</span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct(poll.voted)}%` }} />
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Close
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+/* ---------- View All activity popup ---------- */
+
+function ActivityModal({ onClose }: { onClose: () => void }) {
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="flex max-h-[90vh] w-full max-w-md flex-col rounded-xl border border-[#272D39] bg-[#10131A] p-4 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold">All Voting Activity</h2>
+            <p className="text-[11px] text-slate-400">{allActivity.length} votes cast recently</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Activity list (scrolls when long) */}
+        <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-lg border border-[#272D39] bg-white/3 p-3">
+          {allActivity.map(({ name, poll, time, c }) => (
+            <div key={`${name}-${poll}`} className="flex items-center gap-3">
+              <span
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+                style={{ background: `${c}26`, color: c }}
+              >
+                {initials(name)}
+              </span>
+              <p className="min-w-0 flex-1 truncate text-xs">
+                <span className="font-semibold">{name}</span>{' '}
+                <span className="text-slate-400">voted on</span> {poll}
+              </p>
+              <span className="shrink-0 text-[10px] text-slate-500">{time}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Close
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 /* ---------- Page ---------- */
 export default function VotingPage() {
   const [tab, setTab] = useState<Tab>('active')
   const [showPollModal, setShowPollModal] = useState(false)
+  const [viewing, setViewing] = useState<PollView | null>(null) // poll open in the View popup (null = closed)
+  const [showActivity, setShowActivity] = useState(false) // View All activity popup open / close
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'active', label: `Active Polls (${activePolls.length})` },
@@ -189,12 +390,14 @@ export default function VotingPage() {
                       >
                         Vote Now
                       </Link>
-                      <Link
-                        href={`/secretary/voting/${p.id}`}
-                        className="flex-1 rounded-md border border-[#272D39] px-4 py-1.5 text-center text-[11px] text-slate-300 hover:bg-white/5 sm:flex-none"
+                      {/* View: opens the poll details popup */}
+                      <button
+                        type="button"
+                        onClick={() => setViewing(p)}
+                        className="flex-1 cursor-pointer rounded-md border border-[#272D39] px-4 py-1.5 text-center text-[11px] text-slate-300 hover:bg-white/5 sm:flex-none"
                       >
                         View
-                      </Link>
+                      </button>
                     </div>
                   </div>
 
@@ -222,12 +425,14 @@ export default function VotingPage() {
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <Badge tone={p.result === 'Passed' ? 'green' : 'red'}>{p.result}</Badge>
-                      <Link
-                        href={`/secretary/voting/${p.id}`}
-                        className="rounded-md border border-[#272D39] px-4 py-1.5 text-[11px] text-slate-300 hover:bg-white/5"
+                      {/* View: opens the poll details popup */}
+                      <button
+                        type="button"
+                        onClick={() => setViewing(p)}
+                        className="cursor-pointer rounded-md border border-[#272D39] px-4 py-1.5 text-[11px] text-slate-300 hover:bg-white/5"
                       >
                         View
-                      </Link>
+                      </button>
                     </div>
                   </div>
 
@@ -259,7 +464,16 @@ export default function VotingPage() {
       >
         <Card
           title="Recent Voting Activity" sub="Latest votes cast"
-          action={<Link href="/secretary/voting/activity" className="text-[11px] text-[#A29CFF] hover:underline">View All</Link>}
+          action={
+            // View All: opens the full activity popup
+            <button
+              type="button"
+              onClick={() => setShowActivity(true)}
+              className="cursor-pointer text-[11px] text-[#A29CFF] hover:underline"
+            >
+              View All
+            </button>
+          }
         >
           <div className="flex flex-col gap-3">
             {recent.map(({ name, poll, time, c }) => (
@@ -289,6 +503,22 @@ export default function VotingPage() {
     console.log('New poll:', poll) // add the API call here
   }}
 />
+
+      {/* View Poll popup */}
+      <AnimatePresence>
+        {viewing && (
+          <ViewPollModal
+            key={viewing.id}
+            poll={viewing}
+            onClose={() => setViewing(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* View All activity popup */}
+      <AnimatePresence>
+        {showActivity && <ActivityModal onClose={() => setShowActivity(false)} />}
+      </AnimatePresence>
     </div>
   )
 }

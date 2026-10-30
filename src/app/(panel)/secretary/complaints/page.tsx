@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import Link from "next/link";
-import { motion, type Variants } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   Plus,
   Search,
@@ -19,6 +18,9 @@ import {
   Clock3,
   ChevronLeft,
   ChevronRight,
+  Trash2,
+  CheckCircle2,
+  X,
 } from "lucide-react";
 import { Card, Badge } from "@/Components/ui";
 import AddComplaintModal, {
@@ -71,6 +73,13 @@ type Complaint = {
   assigned: string;
   status: CStatus;
 };
+
+// State of the three-dot dropdown (which row is open and where to draw it)
+type RowMenu = { id: string; top: number; left: number };
+
+// Dropdown size used for positioning
+const MENU_WIDTH = 176;
+const MENU_HEIGHT = 160;
 
 // Complaints list (initial data)
 const initialComplaints: Complaint[] = [
@@ -166,6 +175,17 @@ const statuses: CStatus[] = ["Open", "In Progress", "Resolved", "Overdue"];
 const towers = ["A", "B", "C", "D", "E", "F"];
 const priorities: Priority[] = ["Urgent", "High", "Medium", "Low"];
 
+// Icon + hover colour of each status option in the three-dot dropdown
+const statusIcon: Record<
+  CStatus,
+  { icon: React.ElementType; cls: string }
+> = {
+  Open: { icon: CircleAlert, cls: "hover:text-amber-400" },
+  "In Progress": { icon: Loader, cls: "hover:text-[#A29CFF]" },
+  Resolved: { icon: CircleCheck, cls: "hover:text-emerald-400" },
+  Overdue: { icon: Clock3, cls: "hover:text-red-400" },
+};
+
 // Avatar colours (cycled by row index) and initials helper
 const avatarColors = ["#3B82F6", "#8B5CF6", "#00C2B8", "#F59E0B", "#EF4444"];
 const initials = (n: string) =>
@@ -221,12 +241,419 @@ function Select({
   );
 }
 
+/* ---------- View Details popup ---------- */
+
+// One detail row (label on the left, value on the right)
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-[#272D39] py-2 text-[11px] first:border-t-0">
+      <span className="shrink-0 text-slate-400">{label}</span>
+      <span className="text-right font-medium text-slate-200">{value}</span>
+    </div>
+  );
+}
+
+function ViewComplaintModal({
+  record,
+  onClose,
+}: {
+  record: Complaint;
+  onClose: () => void;
+}) {
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-4 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold">Complaint Details</h2>
+            <p className="truncate text-[11px] text-slate-400">
+              {record.title}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Status */}
+        <div className="mt-3 flex items-center justify-between rounded-lg border border-[#272D39] bg-white/3 px-3 py-2">
+          <span className="text-[11px] text-slate-400">Status</span>
+          <Badge tone={statusTone[record.status]}>{record.status}</Badge>
+        </div>
+
+        {/* Priority */}
+        <div className="mt-2 flex items-center justify-between rounded-lg border border-[#272D39] bg-white/3 px-3 py-2">
+          <span className="text-[11px] text-slate-400">Priority</span>
+          <Badge tone={priorityTone[record.priority]}>{record.priority}</Badge>
+        </div>
+
+        {/* Details */}
+        <div className="mt-2 rounded-lg border border-[#272D39] bg-white/3 px-3">
+          <DetailRow label="Complaint ID" value={record.id} />
+          <DetailRow label="Title" value={record.title} />
+          <DetailRow label="Raised By" value={record.by} />
+          <DetailRow label="Flat" value={record.flat} />
+          <DetailRow label="Tower" value={record.tower} />
+          <DetailRow label="Category" value={record.category} />
+          <DetailRow label="Date" value={record.date} />
+          <DetailRow label="Assigned To" value={record.assigned} />
+        </div>
+
+        {/* Actions */}
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Close
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ---------- Edit Complaint popup ---------- */
+
+function EditComplaintModal({
+  record,
+  onClose,
+  onSubmit,
+}: {
+  record: Complaint;
+  onClose: () => void;
+  onSubmit: (updated: Complaint) => void;
+}) {
+  const [title, setTitle] = useState(record.title);
+  const [category, setCategory] = useState(record.category);
+  const [priority, setPriority] = useState<Priority>(record.priority);
+  const [assigned, setAssigned] = useState(record.assigned);
+  const [cStatus, setCStatus] = useState<CStatus>(record.status);
+  const [date, setDate] = useState(record.date);
+  const [error, setError] = useState("");
+
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (title.trim().length < 3) {
+      setError("Title must be at least 3 characters.");
+      return;
+    }
+    if (!category.trim()) {
+      setError("Please enter the category.");
+      return;
+    }
+    if (!assigned.trim()) {
+      setError("Please enter who the complaint is assigned to.");
+      return;
+    }
+    if (!date.trim()) {
+      setError("Please enter the date.");
+      return;
+    }
+    onSubmit({
+      ...record,
+      title: title.trim(),
+      category: category.trim(),
+      priority,
+      assigned: assigned.trim(),
+      status: cStatus,
+      date: date.trim(),
+    });
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold">Edit Complaint</h2>
+            <p className="text-[11px] text-slate-400">
+              Update the details of {record.id}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Form fields */}
+        <div className="mt-4 flex flex-col gap-3">
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Complaint Title
+            <input
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setError("");
+              }}
+              className={field}
+              autoFocus
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Category
+              <input
+                value={category}
+                onChange={(e) => {
+                  setCategory(e.target.value);
+                  setError("");
+                }}
+                placeholder="e.g. Plumbing"
+                className={field}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Assigned To
+              <input
+                value={assigned}
+                onChange={(e) => {
+                  setAssigned(e.target.value);
+                  setError("");
+                }}
+                placeholder="e.g. Ramesh Kumar"
+                className={field}
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Priority
+              <div className="relative">
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as Priority)}
+                  className={`${field} cursor-pointer pr-8`}
+                >
+                  {priorities.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+              </div>
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Status
+              <div className="relative">
+                <select
+                  value={cStatus}
+                  onChange={(e) => setCStatus(e.target.value as CStatus)}
+                  className={`${field} cursor-pointer pr-8`}
+                >
+                  {statuses.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+              </div>
+            </label>
+          </div>
+
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Date
+            <input
+              value={date}
+              onChange={(e) => {
+                setDate(e.target.value);
+                setError("");
+              }}
+              placeholder="e.g. 25 Oct 2026"
+              className={field}
+            />
+          </label>
+
+          {error && <p className="text-[11px] text-red-400">{error}</p>}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="cursor-pointer rounded-lg bg-linear-to-r from-[#6C63FF] to-[#4DA3FF] px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90 active:scale-95"
+          >
+            Save Changes
+          </button>
+        </div>
+      </motion.form>
+    </motion.div>
+  );
+}
+
+/* ---------- Delete confirm popup ---------- */
+
+function DeleteComplaintConfirm({
+  record,
+  onClose,
+  onConfirm,
+}: {
+  record: Complaint;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  // Close on Esc + lock page scroll while the popup is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="w-full max-w-sm rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/15 text-red-400">
+            <Trash2 className="h-4 w-4" />
+          </span>
+          <div>
+            <h2 className="text-base font-bold">Delete Complaint</h2>
+            <p className="text-[11px] text-slate-400">
+              This action cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        <p className="mt-4 text-xs text-slate-300">
+          Are you sure you want to delete{" "}
+          <span className="font-semibold text-white">{record.title}</span> (
+          {record.id})?
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="cursor-pointer rounded-lg bg-red-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-red-600 active:scale-95"
+          >
+            Delete
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 /* ---------- Page ---------- */
 export default function ComplaintsPage() {
   // Complaints data + modal state
   const [items, setItems] = useState<Complaint[]>(initialComplaints);
   const [added, setAdded] = useState(0); // how many new complaints were added
+  const [removed, setRemoved] = useState(0); // how many complaints were deleted
   const [showComplaintModal, setShowComplaintModal] = useState(false);
+
+  // Complaint open in the View / Edit / Delete popup (null = closed)
+  const [viewing, setViewing] = useState<Complaint | null>(null);
+  const [editing, setEditing] = useState<Complaint | null>(null);
+  const [deleting, setDeleting] = useState<Complaint | null>(null);
+  // Small success message after an action
+  const [toast, setToast] = useState("");
+
+  // Three-dot dropdown state
+  const [menu, setMenu] = useState<RowMenu | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // Filter state
   const [q, setQ] = useState("");
@@ -235,17 +662,62 @@ export default function ComplaintsPage() {
   const [tower, setTower] = useState("All");
   const [priority, setPriority] = useState("All");
 
+  // Hide the success message after 3 seconds
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // Close the dropdown on outside click, Escape key or page scroll
+  useEffect(() => {
+    if (!menu) return;
+
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Ignore clicks on the dropdown itself and on the three-dot buttons (they toggle on their own)
+      if (
+        menuRef.current?.contains(target) ||
+        target.closest("[data-menu-btn]")
+      )
+        return;
+      setMenu(null);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    const onScroll = () => setMenu(null);
+
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [menu]);
+
   // Category dropdown options (auto-updates when a new category is added)
   const categories = useMemo(
     () => Array.from(new Set(items.map((c) => c.category))),
     [items],
   );
 
+  // If the selected category no longer exists (after edit / delete), fall back to "All"
+  const activeCategory =
+    category === "All" || categories.includes(category) ? category : "All";
+
+  // Total shown in the stat card and pagination (grows on add, shrinks on delete)
+  const total = BASE_TOTAL + added - removed;
+
   // Stat cards (Total and Open increase when a new complaint is added)
   const stats = [
     {
       label: "Total Complaints",
-      value: String(BASE_TOTAL + added),
+      value: String(total),
       icon: ClipboardList,
       c: "#3B82F6",
     },
@@ -282,19 +754,62 @@ export default function ComplaintsPage() {
     setAdded((n) => n + 1);
   }
 
+  // Edit: save the changed details (replace with an API call later)
+  const handleEdit = (updated: Complaint) => {
+    setItems((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    setToast(`${updated.id} updated`);
+    setEditing(null);
+  };
+
+  // Three-dot status option: changes only the status (replace with an API call later)
+  const changeStatus = (c: Complaint, next: CStatus) => {
+    setMenu(null);
+    setItems((prev) =>
+      prev.map((x) => (x.id === c.id ? { ...x, status: next } : x)),
+    );
+    setToast(`${c.id} is now ${next}`);
+  };
+
+  // Delete: removes the complaint (replace with an API call later)
+  const handleDelete = () => {
+    if (!deleting) return;
+    setItems((prev) => prev.filter((c) => c.id !== deleting.id));
+    setRemoved((n) => n + 1);
+    setToast(`${deleting.id} deleted`);
+    setDeleting(null);
+  };
+
+  // Three-dot click: toggle the dropdown under the clicked button (flips up near the bottom of the screen)
+  const toggleMenu = (e: React.MouseEvent<HTMLButtonElement>, id: string) => {
+    if (menu?.id === id) {
+      setMenu(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const openUp = rect.bottom + MENU_HEIGHT + 8 > window.innerHeight;
+    setMenu({
+      id,
+      top: openUp ? rect.top - MENU_HEIGHT - 4 : rect.bottom + 4,
+      left: Math.max(8, rect.right - MENU_WIDTH),
+    });
+  };
+
+  // The complaint the open dropdown belongs to
+  const menuItem = menu ? items.find((c) => c.id === menu.id) : null;
+
   // Apply search + all filters
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
     return items.filter(
       (c) =>
         (status === "All" || c.status === status) &&
-        (category === "All" || c.category === category) &&
+        (activeCategory === "All" || c.category === activeCategory) &&
         (tower === "All" || c.tower === tower) &&
         (priority === "All" || c.priority === priority) &&
         (!s ||
           `${c.id} ${c.title} ${c.by} ${c.flat}`.toLowerCase().includes(s)),
     );
-  }, [items, q, status, category, tower, priority]);
+  }, [items, q, status, activeCategory, tower, priority]);
 
   // Clear every filter
   const reset = () => {
@@ -392,7 +907,7 @@ export default function ComplaintsPage() {
           options={statuses}
         />
         <Select
-          value={category}
+          value={activeCategory}
           onChange={setCategory}
           all="All Category"
           options={categories}
@@ -489,24 +1004,38 @@ export default function ComplaintsPage() {
                       </td>
                       <td className={`${td} text-right`}>
                         <span className="inline-flex items-center gap-0.5 text-slate-400">
-                          <Link
-                            href={`/secretary/complaints/${c.id}`}
-                            aria-label="View"
-                            className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-white/5"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </Link>
-                          <Link
-                            href={`/secretary/complaints/${c.id}/edit`}
-                            aria-label="Edit"
-                            className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-white/5"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Link>
+                          {/* View: opens the details popup */}
                           <button
                             type="button"
+                            title="View Details"
+                            aria-label="View"
+                            onClick={() => setViewing(c)}
+                            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition hover:bg-white/5 hover:text-white active:scale-90"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
+                          {/* Edit: opens the edit popup */}
+                          <button
+                            type="button"
+                            title="Edit"
+                            aria-label="Edit"
+                            onClick={() => setEditing(c)}
+                            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition hover:bg-white/5 hover:text-[#A29CFF] active:scale-90"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          {/* Three dot: opens the actions dropdown (change status / delete) */}
+                          <button
+                            type="button"
+                            data-menu-btn
+                            title="More actions"
                             aria-label="More actions"
-                            className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-white/5"
+                            aria-haspopup="menu"
+                            aria-expanded={menu?.id === c.id}
+                            onClick={(e) => toggleMenu(e, c.id)}
+                            className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition hover:bg-white/5 active:scale-90 ${
+                              menu?.id === c.id ? "bg-white/5 text-slate-200" : ""
+                            }`}
                           >
                             <MoreVertical className="h-3.5 w-3.5" />
                           </button>
@@ -534,8 +1063,7 @@ export default function ComplaintsPage() {
           {/* Pagination */}
           <div className="mt-4 flex flex-col items-center justify-between gap-3 text-[11px] text-slate-400 sm:flex-row">
             <span>
-              Showing {list.length ? `1-${list.length}` : 0} of{" "}
-              {BASE_TOTAL + added}
+              Showing {list.length ? `1-${list.length}` : 0} of {total}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -570,12 +1098,107 @@ export default function ComplaintsPage() {
         </Card>
       </motion.div>
 
+      {/* Three-dot dropdown: fixed position so the table's overflow does not clip it */}
+      {menu && menuItem && (
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
+          className="fixed z-50 overflow-hidden rounded-lg border border-[#272D39] bg-[#10131A] p-1 text-[11px] shadow-xl shadow-black/40"
+        >
+          {/* Status options: every status except the current one */}
+          {statuses
+            .filter((s) => s !== menuItem.status)
+            .map((s) => {
+              const { icon: StatusIcon, cls } = statusIcon[s];
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => changeStatus(menuItem, s)}
+                  className={`flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-slate-300 transition-colors hover:bg-white/5 ${cls}`}
+                >
+                  <StatusIcon className="h-3.5 w-3.5" /> Mark as {s}
+                </button>
+              );
+            })}
+
+          {/* Divider */}
+          <div className="my-1 border-t border-[#272D39]" />
+
+          {/* Delete: opens the confirm popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setDeleting(menuItem);
+              setMenu(null);
+            }}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-red-400 transition-colors hover:bg-red-500/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+          </button>
+        </div>
+      )}
+
       {/* New Complaint modal */}
       <AddComplaintModal
         open={showComplaintModal}
         onClose={() => setShowComplaintModal(false)}
         onSave={handleSave}
       />
+
+      {/* View Details popup */}
+      <AnimatePresence>
+        {viewing && (
+          <ViewComplaintModal
+            key={viewing.id}
+            record={viewing}
+            onClose={() => setViewing(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Edit popup */}
+      <AnimatePresence>
+        {editing && (
+          <EditComplaintModal
+            key={editing.id}
+            record={editing}
+            onClose={() => setEditing(null)}
+            onSubmit={handleEdit}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete confirm popup */}
+      <AnimatePresence>
+        {deleting && (
+          <DeleteComplaintConfirm
+            key={deleting.id}
+            record={deleting}
+            onClose={() => setDeleting(null)}
+            onConfirm={handleDelete}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Success message */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="fixed right-4 top-20 z-80 flex max-w-[90vw] items-center gap-2 rounded-lg border border-emerald-500/30 bg-[#10131A] px-4 py-3 text-xs text-emerald-400 shadow-xl"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
