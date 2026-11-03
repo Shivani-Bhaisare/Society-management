@@ -1,10 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { motion, type Variants } from 'framer-motion'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion, type Variants } from 'framer-motion'
 import {
   Plus, FileText, CheckCircle2, Clock, AlertCircle, Search,
   Calendar, ChevronDown, ChevronLeft, ChevronRight, BadgeCheck, Trash2,
+  Eye, Pencil, EllipsisVertical, Send, X, type LucideIcon,
 } from 'lucide-react'
 import { Card } from '@/Components/ui'
 import AddGenerateBillsModal, { type AddGeneratePayload } from '@/Components/AddGenerateBillsModal'
@@ -40,6 +41,13 @@ type Bill = {
   status: Status
 }
 
+// State of the three-dot dropdown (which row is open and where to draw it)
+type RowMenu = { id: number; top: number; left: number }
+
+// Dropdown size used for positioning (View + Edit + Reminder + 2 status options + Delete)
+const MENU_WIDTH = 184
+const MENU_HEIGHT = 250
+
 const initialBills: Bill[] = [
   { id: 1, billNo: 'MB-0001', flat: 'A-101', wing: 'A', resident: 'Rakesh Sharma', month: 'Apr 2025', amount: 3700, due: '10 Apr 2025', status: 'Paid' },
   { id: 2, billNo: 'MB-0002', flat: 'A-102', wing: 'A', resident: 'Priya Mehta', month: 'Apr 2025', amount: 3200, due: '10 Apr 2025', status: 'Pending' },
@@ -52,12 +60,20 @@ const initialBills: Bill[] = [
 const baseMonths = ['Apr 2025', 'May 2025', 'Jun 2025']
 const wings = ['All Wings', 'A', 'B', 'C']
 const statuses = ['All', 'Paid', 'Pending', 'Overdue']
+const billStatuses: Status[] = ['Paid', 'Pending', 'Overdue']
 
 // Status pill colours
 const statusStyle: Record<Status, string> = {
   Paid: 'bg-emerald-500/15 text-emerald-400',
   Pending: 'bg-amber-500/15 text-amber-400',
   Overdue: 'bg-red-500/15 text-red-400',
+}
+
+// Icon + hover colour of each status option in the three-dot dropdown
+const statusIcon: Record<Status, { icon: LucideIcon; cls: string }> = {
+  Paid: { icon: BadgeCheck, cls: 'hover:text-emerald-400' },
+  Pending: { icon: Clock, cls: 'hover:text-amber-400' },
+  Overdue: { icon: AlertCircle, cls: 'hover:text-red-400' },
 }
 
 /* ---------- Shared styles (same as Charge Heads / Residents) ---------- */
@@ -67,8 +83,9 @@ const td = 'border-t border-[#272D39] px-2 py-2.5'
 const field =
   'w-full rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60'
 
-// Small icon button used in the Actions column
-const iconBtn = 'cursor-pointer rounded-md p-1.5 transition active:scale-90'
+// Shared style of every plain item inside the 3-dot action menu
+const menuBtn =
+  'flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-slate-300 transition-colors hover:bg-white/5'
 
 /* ---------- Small helpers ---------- */
 
@@ -99,7 +116,7 @@ function SelectBox({
         onChange={(e) => onChange(e.target.value)}
         className={`${field} cursor-pointer appearance-none pr-8 ${Icon ? 'pl-9' : ''}`}
       >
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        {options.map((o) => <option key={o} value={o} className="bg-[#10131A]">{o}</option>)}
       </select>
       <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
     </span>
@@ -115,6 +132,342 @@ function StatusPill({ status }: { status: Status }) {
   )
 }
 
+// Row actions: a single 3-dot button that opens the action menu
+function Actions({
+  bill, menuOpen, onMore,
+}: {
+  bill: Bill
+  menuOpen: boolean
+  onMore: (e: React.MouseEvent<HTMLButtonElement>) => void
+}) {
+  return (
+    <button
+      type="button"
+      data-menu-btn
+      title="More actions"
+      aria-label={`Open actions menu for ${bill.billNo}`}
+      aria-haspopup="menu"
+      aria-expanded={menuOpen}
+      onClick={onMore}
+      className={`inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#272D39] text-slate-300 transition hover:bg-white/5 hover:text-white active:scale-90 ${
+        menuOpen ? 'bg-white/5 text-white' : ''
+      }`}
+    >
+      <EllipsisVertical className="h-3.5 w-3.5" />
+    </button>
+  )
+}
+
+/* ---------- Popups ---------- */
+
+// Close on Esc + lock page scroll while a popup is open
+function usePopupBehavior(onClose: () => void) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+}
+
+const backdropCls =
+  'fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm'
+
+// One detail row (label on the left, value on the right)
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-[#272D39] py-2 text-[11px] first:border-t-0">
+      <span className="shrink-0 text-slate-400">{label}</span>
+      <span className="text-right font-medium text-slate-200">{value}</span>
+    </div>
+  )
+}
+
+/* View Details popup */
+function ViewBillModal({ record, onClose }: { record: Bill; onClose: () => void }) {
+  usePopupBehavior(onClose)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className={backdropCls}
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-4 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#3B82F6]/15 text-[#3B82F6]">
+              <FileText className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold">Bill Details</h2>
+              <p className="truncate text-[11px] text-slate-400">{record.billNo}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Status */}
+        <div className="mt-3 flex items-center justify-between rounded-lg border border-[#272D39] bg-white/3 px-3 py-2">
+          <span className="text-[11px] text-slate-400">Status</span>
+          <StatusPill status={record.status} />
+        </div>
+
+        {/* Details */}
+        <div className="mt-2 rounded-lg border border-[#272D39] bg-white/3 px-3">
+          <DetailRow label="Bill No." value={record.billNo} />
+          <DetailRow label="Flat No." value={record.flat} />
+          <DetailRow label="Wing" value={record.wing} />
+          <DetailRow label="Resident" value={record.resident} />
+          <DetailRow label="Billing Month" value={record.month} />
+          <DetailRow label="Amount" value={`₹ ${record.amount.toLocaleString('en-IN')}`} />
+          <DetailRow label="Due Date" value={record.due} />
+        </div>
+
+        {/* Actions */}
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Close
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+/* Edit Bill popup */
+function EditBillModal({
+  record, onClose, onSubmit,
+}: {
+  record: Bill
+  onClose: () => void
+  onSubmit: (updated: Bill) => void
+}) {
+  const [resident, setResident] = useState(record.resident)
+  const [amount, setAmount] = useState(String(record.amount))
+  const [due, setDue] = useState(record.due)
+  const [bStatus, setBStatus] = useState<Status>(record.status)
+  const [error, setError] = useState('')
+
+  usePopupBehavior(onClose)
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const amountNum = Number(amount)
+    if (resident.trim().length < 3) {
+      setError('Resident name must be at least 3 characters.')
+      return
+    }
+    if (amount.trim() === '' || Number.isNaN(amountNum) || amountNum <= 0) {
+      setError('Amount must be a number greater than 0.')
+      return
+    }
+    if (!due.trim()) {
+      setError('Please enter the due date.')
+      return
+    }
+    onSubmit({
+      ...record,
+      resident: resident.trim(),
+      amount: Math.round(amountNum),
+      due: due.trim(),
+      status: bStatus,
+    })
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className={backdropCls}
+    >
+      <motion.form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold">Edit Bill</h2>
+            <p className="text-[11px] text-slate-400">
+              {record.billNo} · {record.flat} · {record.month}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Form fields */}
+        <div className="mt-4 flex flex-col gap-3">
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Resident Name
+            <input
+              value={resident}
+              onChange={(e) => { setResident(e.target.value); setError('') }}
+              className={field}
+              autoFocus
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Amount (₹)
+              <input
+                type="number"
+                min={1}
+                value={amount}
+                onChange={(e) => { setAmount(e.target.value); setError('') }}
+                className={field}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+              Due Date
+              <input
+                value={due}
+                onChange={(e) => { setDue(e.target.value); setError('') }}
+                placeholder="e.g. 10 Apr 2025"
+                className={field}
+              />
+            </label>
+          </div>
+
+          <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+            Status
+            <SelectBox
+              value={bStatus}
+              onChange={(v) => setBStatus(v as Status)}
+              options={billStatuses}
+            />
+          </label>
+
+          {error && <p className="text-[11px] text-red-400">{error}</p>}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="cursor-pointer rounded-lg bg-linear-to-r from-[#6C63FF] to-[#4DA3FF] px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90 active:scale-95"
+          >
+            Save Changes
+          </button>
+        </div>
+      </motion.form>
+    </motion.div>
+  )
+}
+
+/* Delete confirm popup */
+function DeleteBillConfirm({
+  record, onClose, onConfirm,
+}: {
+  record: Bill
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  usePopupBehavior(onClose)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+      className={backdropCls}
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="w-full max-w-sm rounded-xl border border-[#272D39] bg-[#10131A] p-5 text-white shadow-2xl"
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/15 text-red-400">
+            <Trash2 className="h-4 w-4" />
+          </span>
+          <div>
+            <h2 className="text-base font-bold">Delete Bill</h2>
+            <p className="text-[11px] text-slate-400">This action cannot be undone.</p>
+          </div>
+        </div>
+
+        <p className="mt-4 text-xs text-slate-300">
+          Are you sure you want to delete bill{' '}
+          <span className="font-semibold text-white">{record.billNo}</span> of{' '}
+          <span className="font-semibold text-white">{record.resident}</span>?
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg border border-[#272D39] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="cursor-pointer rounded-lg bg-red-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-red-600 active:scale-95"
+          >
+            Delete
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 /* ---------- Page ---------- */
 export default function MaintenanceBillsPage() {
   const [bills, setBills] = useState<Bill[]>(initialBills)
@@ -127,6 +480,51 @@ export default function MaintenanceBillsPage() {
   const [flat, setFlat] = useState('All Flats')
   const [status, setStatus] = useState(statuses[0])
   const [search, setSearch] = useState('')
+
+  // Bill open in the View / Edit / Delete popup (null = closed)
+  const [viewing, setViewing] = useState<Bill | null>(null)
+  const [editing, setEditing] = useState<Bill | null>(null)
+  const [deleting, setDeleting] = useState<Bill | null>(null)
+  // Small success message after an action
+  const [toast, setToast] = useState('')
+
+  // Three-dot dropdown state
+  const [menu, setMenu] = useState<RowMenu | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // Hide the success message after 3 seconds
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(''), 3000)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  // Close the dropdown on outside click, Escape key or page scroll
+  useEffect(() => {
+    if (!menu) return
+
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      // Ignore clicks on the dropdown itself and on the three-dot buttons (they toggle on their own)
+      if (menuRef.current?.contains(target) || target.closest('[data-menu-btn]')) return
+      setMenu(null)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenu(null)
+    }
+    const onScroll = () => setMenu(null)
+
+    document.addEventListener('mousedown', onMouseDown)
+    document.addEventListener('keydown', onKeyDown)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onScroll)
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown)
+      document.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [menu])
 
   // Month dropdown also includes months of newly generated bills
   const months = useMemo(
@@ -183,13 +581,51 @@ export default function MaintenanceBillsPage() {
     setMonth(data.month)
   }
 
-  // Row actions
-  const markPaid = (id: number) => {
-    setBills((prev) => prev.map((b) => (b.id === id ? { ...b, status: 'Paid' } : b)))
+  // Edit: save the changed details (replace with an API call later)
+  const handleEdit = (updated: Bill) => {
+    setBills((prev) => prev.map((b) => (b.id === updated.id ? updated : b)))
+    setToast(`Bill ${updated.billNo} updated`)
+    setEditing(null)
   }
-  const remove = (id: number) => {
-    setBills((prev) => prev.filter((b) => b.id !== id))
+
+  // Three-dot status option: changes only the status (replace with an API call later)
+  const changeStatus = (b: Bill, next: Status) => {
+    setMenu(null)
+    setBills((prev) => prev.map((x) => (x.id === b.id ? { ...x, status: next } : x)))
+    setToast(`Bill ${b.billNo} is now ${next}`)
   }
+
+  // Send reminder (replace with an API call later)
+  const sendReminder = (b: Bill) => {
+    setMenu(null)
+    setToast(`Reminder sent to ${b.resident}`)
+  }
+
+  // Delete: removes the bill (replace with an API call later)
+  const handleDelete = () => {
+    if (!deleting) return
+    setBills((prev) => prev.filter((b) => b.id !== deleting.id))
+    setToast(`Bill ${deleting.billNo} deleted`)
+    setDeleting(null)
+  }
+
+  // Three-dot click: toggle the dropdown under the clicked button (flips up near the bottom of the screen)
+  const toggleMenu = (e: React.MouseEvent<HTMLButtonElement>, id: number) => {
+    if (menu?.id === id) {
+      setMenu(null)
+      return
+    }
+    const rect = e.currentTarget.getBoundingClientRect()
+    const openUp = rect.bottom + MENU_HEIGHT + 8 > window.innerHeight
+    setMenu({
+      id,
+      top: openUp ? rect.top - MENU_HEIGHT - 4 : rect.bottom + 4,
+      left: Math.max(8, rect.right - MENU_WIDTH),
+    })
+  }
+
+  // The bill the open dropdown belongs to
+  const menuBill = menu ? bills.find((b) => b.id === menu.id) : null
 
   return (
     <div className="mx-auto flex w-full max-w-350 flex-col gap-4">
@@ -296,7 +732,7 @@ export default function MaintenanceBillsPage() {
                   <th className={th}>Amount</th>
                   <th className={th}>Due Date</th>
                   <th className={th}>Status</th>
-                  <th className={`${th} text-right`}>Actions</th>
+                  <th className={`${th} text-center`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -319,33 +755,13 @@ export default function MaintenanceBillsPage() {
                       <StatusPill status={b.status} />
                     </td>
 
-                    {/* Actions: icons directly in the row (no 3-dot menu) */}
-                    <td className={`${td} text-right`}>
-                      <div className="flex items-center justify-end gap-0.5">
-                        {/* Mark Paid: only for bills that are not paid yet */}
-                        {b.status !== 'Paid' && (
-                          <button
-                            type="button"
-                            title="Mark Paid"
-                            aria-label="Mark Paid"
-                            onClick={() => markPaid(b.id)}
-                            className={`${iconBtn} text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-400`}
-                          >
-                            <BadgeCheck className="h-4 w-4" />
-                          </button>
-                        )}
-
-                        {/* Delete */}
-                        <button
-                          type="button"
-                          title="Delete"
-                          aria-label="Delete"
-                          onClick={() => remove(b.id)}
-                          className={`${iconBtn} text-red-400 hover:bg-red-500/10`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
+                    {/* Actions: single 3-dot button (same as Vendors) */}
+                    <td className={`${td} text-center`}>
+                      <Actions
+                        bill={b}
+                        menuOpen={menu?.id === b.id}
+                        onMore={(e) => toggleMenu(e, b.id)}
+                      />
                     </td>
                   </motion.tr>
                 ))}
@@ -400,12 +816,148 @@ export default function MaintenanceBillsPage() {
         </Card>
       </motion.div>
 
+      {/* Three-dot dropdown: fixed position so the table's overflow does not clip it */}
+      {menu && menuBill && (
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
+          className="fixed z-50 overflow-hidden rounded-lg border border-[#272D39] bg-[#10131A] p-1 text-[11px] shadow-xl shadow-black/40"
+        >
+          {/* View Details: opens the details popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setViewing(menuBill)
+              setMenu(null)
+            }}
+            className={menuBtn}
+          >
+            <Eye className="h-3.5 w-3.5" /> View Details
+          </button>
+
+          {/* Edit: opens the edit popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setEditing(menuBill)
+              setMenu(null)
+            }}
+            className={menuBtn}
+          >
+            <Pencil className="h-3.5 w-3.5" /> Edit
+          </button>
+
+          {/* Send Reminder: only for bills that are not paid yet */}
+          {menuBill.status !== 'Paid' && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => sendReminder(menuBill)}
+              className={menuBtn}
+            >
+              <Send className="h-3.5 w-3.5" /> Send Reminder
+            </button>
+          )}
+
+          {/* Divider */}
+          <div className="my-1 border-t border-[#272D39]" />
+
+          {/* Status options: every status except the current one */}
+          {billStatuses
+            .filter((s) => s !== menuBill.status)
+            .map((s) => {
+              const { icon: StatusIcon, cls } = statusIcon[s]
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => changeStatus(menuBill, s)}
+                  className={`${menuBtn} ${cls}`}
+                >
+                  <StatusIcon className="h-3.5 w-3.5" /> Mark as {s}
+                </button>
+              )
+            })}
+
+          {/* Divider */}
+          <div className="my-1 border-t border-[#272D39]" />
+
+          {/* Delete: opens the confirm popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setDeleting(menuBill)
+              setMenu(null)
+            }}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-red-400 transition-colors hover:bg-red-500/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+          </button>
+        </div>
+      )}
+
       {/* Generate Bills drawer */}
       <AddGenerateBillsModal
         open={open}
         onClose={() => setOpen(false)}
         onGenerate={handleGenerate}
       />
+
+      {/* View Details popup */}
+      <AnimatePresence>
+        {viewing && (
+          <ViewBillModal
+            key={viewing.id}
+            record={viewing}
+            onClose={() => setViewing(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Edit popup */}
+      <AnimatePresence>
+        {editing && (
+          <EditBillModal
+            key={editing.id}
+            record={editing}
+            onClose={() => setEditing(null)}
+            onSubmit={handleEdit}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete confirm popup */}
+      <AnimatePresence>
+        {deleting && (
+          <DeleteBillConfirm
+            key={deleting.id}
+            record={deleting}
+            onClose={() => setDeleting(null)}
+            onConfirm={handleDelete}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Success message */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="fixed right-4 top-20 z-80 flex max-w-[90vw] items-center gap-2 rounded-lg border border-emerald-500/30 bg-[#10131A] px-4 py-3 text-xs text-emerald-400 shadow-xl"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

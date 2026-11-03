@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   Landmark,
@@ -18,6 +18,7 @@ import {
   Pencil,
   Power,
   Trash2,
+  EllipsisVertical,
   CheckCircle2,
   X,
 } from "lucide-react";
@@ -110,6 +111,13 @@ type Fund = {
   status: FundStatus;
 };
 
+// State of the three-dot dropdown (which row is open and where to draw it)
+type RowMenu = { id: number; top: number; left: number };
+
+// Dropdown size used for positioning (View + Edit + Status option + Delete)
+const MENU_WIDTH = 184;
+const MENU_HEIGHT = 190;
+
 const initialFunds: Fund[] = [
   { id: 1, name: "Sinking Fund", purpose: "Major repairs & future capital expenses", opening: "₹ 15,00,000", contributions: "₹ 7,50,000", utilization: "₹ 1,00,000", closing: "₹ 21,50,000", target: "₹ 50,00,000", status: "Active" },
   { id: 2, name: "Lift Replacement Fund", purpose: "Lift maintenance & replacement", opening: "₹ 8,00,000", contributions: "₹ 4,20,000", utilization: "₹ 2,00,000", closing: "₹ 10,20,000", target: "₹ 25,00,000", status: "Active" },
@@ -135,10 +143,39 @@ const td = "border-t border-[#272D39] px-2 py-2.5";
 const field =
   "w-full rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60";
 
-// Small icon button used in the Actions column
-const iconBtn = "cursor-pointer rounded-md p-1.5 transition active:scale-90";
+// Shared style of every plain item inside the 3-dot action menu
+const menuBtn =
+  "flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-slate-300 transition-colors hover:bg-white/5";
 
 /* ---------- Small helpers ---------- */
+
+// Row actions: a single 3-dot button that opens the action menu
+function Actions({
+  fund,
+  menuOpen,
+  onMore,
+}: {
+  fund: Fund;
+  menuOpen: boolean;
+  onMore: (e: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-menu-btn
+      title="More actions"
+      aria-label={`Open actions menu for ${fund.name}`}
+      aria-haspopup="menu"
+      aria-expanded={menuOpen}
+      onClick={onMore}
+      className={`inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#272D39] text-slate-300 transition hover:bg-white/5 hover:text-white active:scale-90 ${
+        menuOpen ? "bg-white/5 text-white" : ""
+      }`}
+    >
+      <EllipsisVertical className="h-3.5 w-3.5" />
+    </button>
+  );
+}
 
 // Up / down trend chip (green = good, red = bad)
 function Trend({ pct, up, good }: { pct: string; up: boolean; good: boolean }) {
@@ -572,12 +609,47 @@ export default function SinkingFundPage() {
   // Small success message after an action
   const [toast, setToast] = useState("");
 
+  // Three-dot dropdown state
+  const [menu, setMenu] = useState<RowMenu | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
   // Hide the success message after 3 seconds
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(""), 3000);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // Close the dropdown on outside click, Escape key or page scroll
+  useEffect(() => {
+    if (!menu) return;
+
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Ignore clicks on the dropdown itself and on the three-dot buttons (they toggle on their own)
+      if (
+        menuRef.current?.contains(target) ||
+        target.closest("[data-menu-btn]")
+      )
+        return;
+      setMenu(null);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    const onScroll = () => setMenu(null);
+
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [menu]);
 
   // Fund dropdown always follows the current list (rename / delete safe)
   const fundOptions = useMemo(
@@ -631,6 +703,7 @@ export default function SinkingFundPage() {
   // Activate / Deactivate: flips the status (replace with an API call later)
   const toggleStatus = (f: Fund) => {
     const next: FundStatus = f.status === "Active" ? "Inactive" : "Active";
+    setMenu(null);
     setFunds((prev) => prev.map((x) => (x.id === f.id ? { ...x, status: next } : x)));
     setToast(`${f.name} is now ${next}`);
   };
@@ -643,6 +716,24 @@ export default function SinkingFundPage() {
     setToast(`${deleting.name} deleted`);
     setDeleting(null);
   };
+
+  // Three-dot click: toggle the dropdown under the clicked button (flips up near the bottom of the screen)
+  const toggleMenu = (e: React.MouseEvent<HTMLButtonElement>, id: number) => {
+    if (menu?.id === id) {
+      setMenu(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const openUp = rect.bottom + MENU_HEIGHT + 8 > window.innerHeight;
+    setMenu({
+      id,
+      top: openUp ? rect.top - MENU_HEIGHT - 4 : rect.bottom + 4,
+      left: Math.max(8, rect.right - MENU_WIDTH),
+    });
+  };
+
+  // The fund the open dropdown belongs to
+  const menuFund = menu ? funds.find((f) => f.id === menu.id) : null;
 
   return (
     <div className="mx-auto flex w-full max-w-350 flex-col gap-4">
@@ -930,7 +1021,7 @@ export default function SinkingFundPage() {
                   <th className={th}>Closing Balance</th>
                   <th className={th}>Target Amount</th>
                   <th className={th}>Status</th>
-                  <th className={`${th} text-right`}>Actions</th>
+                  <th className={`${th} text-center`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -967,57 +1058,13 @@ export default function SinkingFundPage() {
                       </Badge>
                     </td>
 
-                    {/* Actions: icons directly in the row (no 3-dot menu) */}
-                    <td className={`${td} text-right`}>
-                      <div className="flex items-center justify-end gap-0.5">
-                        {/* View Details */}
-                        <button
-                          type="button"
-                          title="View Details"
-                          aria-label="View Details"
-                          onClick={() => setViewing(f)}
-                          className={`${iconBtn} text-slate-400 hover:bg-white/5 hover:text-white`}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-
-                        {/* Edit */}
-                        <button
-                          type="button"
-                          title="Edit"
-                          aria-label="Edit"
-                          onClick={() => setEditing(f)}
-                          className={`${iconBtn} text-slate-400 hover:bg-white/5 hover:text-[#A29CFF]`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-
-                        {/* Activate / Deactivate */}
-                        <button
-                          type="button"
-                          title={f.status === "Active" ? "Deactivate" : "Activate"}
-                          aria-label={f.status === "Active" ? "Deactivate" : "Activate"}
-                          onClick={() => toggleStatus(f)}
-                          className={`${iconBtn} ${
-                            f.status === "Active"
-                              ? "text-emerald-400 hover:bg-emerald-500/10"
-                              : "text-slate-500 hover:bg-white/5 hover:text-white"
-                          }`}
-                        >
-                          <Power className="h-4 w-4" />
-                        </button>
-
-                        {/* Delete */}
-                        <button
-                          type="button"
-                          title="Delete"
-                          aria-label="Delete"
-                          onClick={() => setDeleting(f)}
-                          className={`${iconBtn} text-red-400 hover:bg-red-500/10`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
+                    {/* Actions: single 3-dot button (same as Vendors) */}
+                    <td className={`${td} text-center`}>
+                      <Actions
+                        fund={f}
+                        menuOpen={menu?.id === f.id}
+                        onMore={(e) => toggleMenu(e, f.id)}
+                      />
                     </td>
                   </motion.tr>
                 ))}
@@ -1066,6 +1113,76 @@ export default function SinkingFundPage() {
           </div>
         </Card>
       </motion.div>
+
+      {/* Three-dot dropdown: fixed position so the table's overflow does not clip it */}
+      {menu && menuFund && (
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
+          className="fixed z-50 overflow-hidden rounded-lg border border-[#272D39] bg-[#10131A] p-1 text-[11px] shadow-xl shadow-black/40"
+        >
+          {/* View Details: opens the details popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setViewing(menuFund);
+              setMenu(null);
+            }}
+            className={menuBtn}
+          >
+            <Eye className="h-3.5 w-3.5" /> View Details
+          </button>
+
+          {/* Edit: opens the edit popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setEditing(menuFund);
+              setMenu(null);
+            }}
+            className={menuBtn}
+          >
+            <Pencil className="h-3.5 w-3.5" /> Edit
+          </button>
+
+          {/* Divider */}
+          <div className="my-1 border-t border-[#272D39]" />
+
+          {/* Status option: the status the fund is not in right now */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => toggleStatus(menuFund)}
+            className={`${menuBtn} ${
+              menuFund.status === "Active"
+                ? "hover:text-slate-200"
+                : "hover:text-emerald-400"
+            }`}
+          >
+            <Power className="h-3.5 w-3.5" /> Mark as{" "}
+            {menuFund.status === "Active" ? "Inactive" : "Active"}
+          </button>
+
+          {/* Divider */}
+          <div className="my-1 border-t border-[#272D39]" />
+
+          {/* Delete: opens the confirm popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setDeleting(menuFund);
+              setMenu(null);
+            }}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-red-400 transition-colors hover:bg-red-500/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+          </button>
+        </div>
+      )}
 
       {/* Create Reserve Fund drawer (opens from the "Create Fund" button) */}
       <AddReserveFundModal

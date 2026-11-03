@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   CheckCircle2,
@@ -12,6 +12,7 @@ import {
   Unlink,
   BadgeCheck,
   Eye,
+  EllipsisVertical,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -52,6 +53,13 @@ type Transaction = {
   status: Status;
 };
 
+// State of the three-dot dropdown (which row is open and where to draw it)
+type RowMenu = { id: number; top: number; left: number };
+
+// Dropdown size used for positioning (View Details + Match / Unmatch)
+const MENU_WIDTH = 184;
+const MENU_HEIGHT = 100;
+
 const initialTransactions: Transaction[] = [
   { id: 1, date: "01 Oct 2025", description: "Resident Payment", bankAmount: 3700, ledgerAmount: 3700, status: "Matched" },
   { id: 2, date: "03 Oct 2025", description: "Bank Charges", bankAmount: 250, ledgerAmount: null, status: "Unmatched" },
@@ -85,8 +93,39 @@ const td = "border-t border-[#272D39] px-2 py-2.5";
 const field =
   "w-full rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60";
 
-// Small icon button used in the Actions column
-const iconBtn = "cursor-pointer rounded-md p-1.5 transition active:scale-90";
+// Shared style of every plain item inside the 3-dot action menu
+const menuBtn =
+  "flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-slate-300 transition-colors hover:bg-white/5";
+
+/* ---------- Small helpers ---------- */
+
+// Row actions: a single 3-dot button that opens the action menu
+function Actions({
+  txn,
+  menuOpen,
+  onMore,
+}: {
+  txn: Transaction;
+  menuOpen: boolean;
+  onMore: (e: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-menu-btn
+      title="More actions"
+      aria-label={`Open actions menu for ${txn.description}`}
+      aria-haspopup="menu"
+      aria-expanded={menuOpen}
+      onClick={onMore}
+      className={`inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#272D39] text-slate-300 transition hover:bg-white/5 hover:text-white active:scale-90 ${
+        menuOpen ? "bg-white/5 text-white" : ""
+      }`}
+    >
+      <EllipsisVertical className="h-3.5 w-3.5" />
+    </button>
+  );
+}
 
 /* ---------- View Details popup ---------- */
 
@@ -328,12 +367,47 @@ export default function BankReconciliationPage() {
   // Small success message after an action
   const [toast, setToast] = useState("");
 
+  // Three-dot dropdown state
+  const [menu, setMenu] = useState<RowMenu | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
   // Hide the success message after 3 seconds
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(""), 3000);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // Close the dropdown on outside click, Escape key or page scroll
+  useEffect(() => {
+    if (!menu) return;
+
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Ignore clicks on the dropdown itself and on the three-dot buttons (they toggle on their own)
+      if (
+        menuRef.current?.contains(target) ||
+        target.closest("[data-menu-btn]")
+      )
+        return;
+      setMenu(null);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    const onScroll = () => setMenu(null);
+
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [menu]);
 
   // Summary numbers change when a row is matched / unmatched
   const stats = useMemo(() => {
@@ -391,6 +465,7 @@ export default function BankReconciliationPage() {
 
   // Unmatch: remove the ledger link (replace with an API call later)
   const handleUnmatch = (t: Transaction) => {
+    setMenu(null);
     setTxns((prev) =>
       prev.map((x) =>
         x.id === t.id ? { ...x, ledgerAmount: null, status: "Unmatched" } : x,
@@ -398,6 +473,24 @@ export default function BankReconciliationPage() {
     );
     setToast(`${t.description} is now Unmatched`);
   };
+
+  // Three-dot click: toggle the dropdown under the clicked button (flips up near the bottom of the screen)
+  const toggleMenu = (e: React.MouseEvent<HTMLButtonElement>, id: number) => {
+    if (menu?.id === id) {
+      setMenu(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const openUp = rect.bottom + MENU_HEIGHT + 8 > window.innerHeight;
+    setMenu({
+      id,
+      top: openUp ? rect.top - MENU_HEIGHT - 4 : rect.bottom + 4,
+      left: Math.max(8, rect.right - MENU_WIDTH),
+    });
+  };
+
+  // The transaction the open dropdown belongs to
+  const menuTxn = menu ? txns.find((t) => t.id === menu.id) : null;
 
   return (
     <div className="mx-auto flex w-full max-w-350 flex-col gap-4">
@@ -557,7 +650,7 @@ export default function BankReconciliationPage() {
                   <th className={`${th} text-right`}>Bank Amount</th>
                   <th className={`${th} text-right`}>Ledger Amount</th>
                   <th className={th}>Status</th>
-                  <th className={`${th} text-right`}>Actions</th>
+                  <th className={`${th} text-center`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -586,46 +679,13 @@ export default function BankReconciliationPage() {
                       </Badge>
                     </td>
 
-                    {/* Actions: icons directly in the row */}
-                    <td className={`${td} text-right`}>
-                      <div className="flex items-center justify-end gap-0.5">
-                        {/* View Details */}
-                        <button
-                          type="button"
-                          title="View Details"
-                          aria-label="View Details"
-                          onClick={() => setViewing(t)}
-                          className={`${iconBtn} text-slate-400 hover:bg-white/5 hover:text-white`}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-
-                        {/* Match: only for unmatched transactions */}
-                        {t.status === "Unmatched" && (
-                          <button
-                            type="button"
-                            title="Match"
-                            aria-label="Match"
-                            onClick={() => setMatching(t)}
-                            className={`${iconBtn} text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-400`}
-                          >
-                            <Link2 className="h-4 w-4" />
-                          </button>
-                        )}
-
-                        {/* Unmatch: only for matched transactions */}
-                        {t.status === "Matched" && (
-                          <button
-                            type="button"
-                            title="Unmatch"
-                            aria-label="Unmatch"
-                            onClick={() => handleUnmatch(t)}
-                            className={`${iconBtn} text-slate-400 hover:bg-red-500/10 hover:text-red-400`}
-                          >
-                            <Unlink className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
+                    {/* Actions: single 3-dot button (same as Vendors) */}
+                    <td className={`${td} text-center`}>
+                      <Actions
+                        txn={t}
+                        menuOpen={menu?.id === t.id}
+                        onMore={(e) => toggleMenu(e, t.id)}
+                      />
                     </td>
                   </motion.tr>
                 ))}
@@ -679,6 +739,59 @@ export default function BankReconciliationPage() {
           </div>
         </Card>
       </motion.div>
+
+      {/* Three-dot dropdown: fixed position so the table's overflow does not clip it */}
+      {menu && menuTxn && (
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
+          className="fixed z-50 overflow-hidden rounded-lg border border-[#272D39] bg-[#10131A] p-1 text-[11px] shadow-xl shadow-black/40"
+        >
+          {/* View Details: opens the details popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setViewing(menuTxn);
+              setMenu(null);
+            }}
+            className={menuBtn}
+          >
+            <Eye className="h-3.5 w-3.5" /> View Details
+          </button>
+
+          {/* Divider */}
+          <div className="my-1 border-t border-[#272D39]" />
+
+          {/* Match: only for unmatched transactions */}
+          {menuTxn.status === "Unmatched" && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMatching(menuTxn);
+                setMenu(null);
+              }}
+              className={`${menuBtn} hover:text-emerald-400`}
+            >
+              <Link2 className="h-3.5 w-3.5" /> Match
+            </button>
+          )}
+
+          {/* Unmatch: only for matched transactions */}
+          {menuTxn.status === "Matched" && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => handleUnmatch(menuTxn)}
+              className={`${menuBtn} hover:text-red-400`}
+            >
+              <Unlink className="h-3.5 w-3.5" /> Unmatch
+            </button>
+          )}
+        </div>
+      )}
 
       {/* View Details popup */}
       <AnimatePresence>

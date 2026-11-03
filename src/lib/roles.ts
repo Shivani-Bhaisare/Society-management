@@ -36,12 +36,20 @@ import {
 
 export type Role = "president" | "secretary" | "treasurer";
 
+// Sub menu item (no icon)
+type SubLink = {
+  href: string;
+  label: string;
+};
+
 type NavLink = {
   href: string;
   label: string;
   icon: LucideIcon;
   // Optional small text shown under the label (used by the treasurer menu)
   desc?: string;
+  // Optional sub menu items (shown under the parent, without icons)
+  children?: SubLink[];
 };
 
 export const roleMenus: Record<Role, NavLink[]> = {
@@ -58,16 +66,16 @@ export const roleMenus: Record<Role, NavLink[]> = {
       href: "/president/society-master",
       label: "Society Master",
       icon: Building2,
-    },
-    {
-      href: "/president/residents",
-      label: "Residents",
-      icon: Users,
-    },
-    {
-      href: "/president/committee",
-      label: "Committee",
-      icon: UsersRound,
+      children: [
+        {
+          href: "/president/residents",
+          label: "Residents",
+        },
+        {
+          href: "/president/committee",
+          label: "Committee",
+        },
+      ],
     },
     {
       href: "/president/finance",

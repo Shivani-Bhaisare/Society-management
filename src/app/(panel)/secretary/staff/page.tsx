@@ -139,6 +139,10 @@ const td = "border-t border-[#272D39] px-2 py-2.5";
 const field =
   "w-full appearance-none rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 pr-8 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60";
 
+// Shared style of every plain item inside the 3-dot action menu
+const menuBtn =
+  "flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-slate-300 transition hover:bg-white/5 hover:text-white";
+
 const initials = (name: string) =>
   name
     .trim()
@@ -216,54 +220,30 @@ function Select({
   );
 }
 
-// Row actions: View, Edit and the 3-dot menu button (handlers come from the page)
+// Row actions: a single 3-dot button that opens the action menu (handler comes from the page)
 function Actions({
   row,
   menuOpen,
-  onView,
-  onEdit,
   onMore,
 }: {
   row: StaffRow;
   menuOpen: boolean;
-  onView: (r: StaffRow) => void;
-  onEdit: (r: StaffRow) => void;
   onMore: (e: React.MouseEvent<HTMLButtonElement>, r: StaffRow) => void;
 }) {
   return (
-    <div className="flex items-center gap-0.5 text-slate-400">
-      <button
-        type="button"
-        aria-label="View"
-        title="View"
-        onClick={() => onView(row)}
-        className="cursor-pointer rounded-md p-1.5 hover:bg-white/5 hover:text-white"
-      >
-        <Eye className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        aria-label="Edit"
-        title="Edit"
-        onClick={() => onEdit(row)}
-        className="cursor-pointer rounded-md p-1.5 hover:bg-white/5 hover:text-white"
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        aria-label="More"
-        title="More"
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        onClick={(e) => onMore(e, row)}
-        className={`cursor-pointer rounded-md p-1.5 hover:bg-white/5 hover:text-white ${
-          menuOpen ? "bg-white/5 text-white" : ""
-        }`}
-      >
-        <EllipsisVertical className="h-3.5 w-3.5" />
-      </button>
-    </div>
+    <button
+      type="button"
+      aria-label={`Open actions menu for ${row.name}`}
+      title="More actions"
+      aria-haspopup="menu"
+      aria-expanded={menuOpen}
+      onClick={(e) => onMore(e, row)}
+      className={`inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#272D39] text-slate-300 transition hover:bg-white/5 hover:text-white active:scale-90 ${
+        menuOpen ? "bg-white/5 text-white" : ""
+      }`}
+    >
+      <EllipsisVertical className="h-3.5 w-3.5" />
+    </button>
   );
 }
 
@@ -710,7 +690,8 @@ export default function StaffPage() {
     const right = window.innerWidth - rect.right;
     const spaceBelow = window.innerHeight - rect.bottom;
 
-    if (spaceBelow < 200) {
+    // Menu has up to 5 items (View, Edit, 2 statuses, Delete), so it needs more room
+    if (spaceBelow < 260) {
       setMenu({ id: r.id, right, bottom: window.innerHeight - rect.top + 4 });
     } else {
       setMenu({ id: r.id, right, top: rect.bottom + 4 });
@@ -900,7 +881,7 @@ export default function StaffPage() {
                   <th className={th}>Shift</th>
                   <th className={th}>Contact</th>
                   <th className={th}>Status</th>
-                  <th className={th}>Actions</th>
+                  <th className={`${th} text-center`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -919,12 +900,10 @@ export default function StaffPage() {
                     <td className={td}>
                       <Badge tone={statusTone[s.status]}>{s.status}</Badge>
                     </td>
-                    <td className={td}>
+                    <td className={`${td} text-center`}>
                       <Actions
                         row={s}
                         menuOpen={menu?.id === s.id}
-                        onView={setViewing}
-                        onEdit={setEditing}
                         onMore={openMenu}
                       />
                     </td>
@@ -981,8 +960,6 @@ export default function StaffPage() {
               <Actions
                 row={s}
                 menuOpen={menu?.id === s.id}
-                onView={setViewing}
-                onEdit={setEditing}
                 onMore={openMenu}
               />
             </div>
@@ -1023,6 +1000,35 @@ export default function StaffPage() {
               style={{ top: menu.top, bottom: menu.bottom, right: menu.right }}
               className="fixed z-70 w-48 origin-top-right overflow-hidden rounded-lg border border-[#272D39] bg-[#10131A] p-1 text-xs shadow-2xl"
             >
+              {/* View Details */}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setViewing(menuStaff);
+                  setMenu(null);
+                }}
+                className={menuBtn}
+              >
+                <Eye className="h-3.5 w-3.5" /> View Details
+              </button>
+
+              {/* Edit */}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setEditing(menuStaff);
+                  setMenu(null);
+                }}
+                className={menuBtn}
+              >
+                <Pencil className="h-3.5 w-3.5" /> Edit
+              </button>
+
+              {/* Divider */}
+              <div className="my-1 border-t border-[#272D39]" />
+
               {/* Mark as: only the statuses this staff member does not have yet */}
               {states
                 .filter((st) => st !== menuStaff.status)
@@ -1032,12 +1038,16 @@ export default function StaffPage() {
                     type="button"
                     role="menuitem"
                     onClick={() => changeStatus(menuStaff, st)}
-                    className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-slate-300 transition hover:bg-white/5 hover:text-white"
+                    className={menuBtn}
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" /> Mark as {st}
                   </button>
                 ))}
 
+              {/* Divider */}
+              <div className="my-1 border-t border-[#272D39]" />
+
+              {/* Delete (shown in red) */}
               <button
                 type="button"
                 role="menuitem"

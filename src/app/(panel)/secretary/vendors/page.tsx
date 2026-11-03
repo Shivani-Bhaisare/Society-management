@@ -81,9 +81,9 @@ type VendorRow = {
 // State of the three-dot dropdown (which row is open and where to draw it)
 type RowMenu = { id: number; top: number; left: number };
 
-// Dropdown size used for positioning
+// Dropdown size used for positioning (View + Edit + Call + 3 status options + Delete)
 const MENU_WIDTH = 184;
-const MENU_HEIGHT = 210;
+const MENU_HEIGHT = 280;
 
 /* ---------- Data (replace with API later) ---------- */
 const initialVendors: VendorRow[] = [
@@ -160,6 +160,10 @@ const td = "border-t border-[#272D39] px-2 py-2.5";
 const field =
   "w-full appearance-none rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 pr-8 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60";
 
+// Shared style of every plain item inside the 3-dot action menu
+const menuBtn =
+  "flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-slate-300 transition-colors hover:bg-white/5";
+
 /* ---------- Small pieces ---------- */
 /* IMAGE: vendor logo/photo (32x32). Later use <Image fill className="object-cover" />
    (keep "relative overflow-hidden rounded-lg" on the parent) */
@@ -215,58 +219,31 @@ function Select({
   );
 }
 
-// Action icons of one vendor (View / Edit / three dot), used in both the table and the phone cards
+// Row actions: a single 3-dot button that opens the action menu (used in both the table and the phone cards)
 function Actions({
   vendor,
   menuOpen,
-  onView,
-  onEdit,
   onMore,
 }: {
   vendor: VendorRow;
   menuOpen: boolean;
-  onView: () => void;
-  onEdit: () => void;
   onMore: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
-    <div className="flex items-center gap-0.5 text-slate-400">
-      {/* View: opens the details popup */}
-      <button
-        type="button"
-        title="View Details"
-        aria-label="View"
-        onClick={onView}
-        className="cursor-pointer rounded-md p-1.5 transition hover:bg-white/5 hover:text-white active:scale-90"
-      >
-        <Eye className="h-3.5 w-3.5" />
-      </button>
-      {/* Edit: opens the edit popup */}
-      <button
-        type="button"
-        title="Edit"
-        aria-label="Edit"
-        onClick={onEdit}
-        className="cursor-pointer rounded-md p-1.5 transition hover:bg-white/5 hover:text-[#A29CFF] active:scale-90"
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </button>
-      {/* Three dot: opens the actions dropdown (call / change status / delete) */}
-      <button
-        type="button"
-        data-menu-btn
-        title="More actions"
-        aria-label={`More actions for ${vendor.name}`}
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        onClick={onMore}
-        className={`cursor-pointer rounded-md p-1.5 transition hover:bg-white/5 hover:text-white active:scale-90 ${
-          menuOpen ? "bg-white/5 text-slate-200" : ""
-        }`}
-      >
-        <EllipsisVertical className="h-3.5 w-3.5" />
-      </button>
-    </div>
+    <button
+      type="button"
+      data-menu-btn
+      title="More actions"
+      aria-label={`Open actions menu for ${vendor.name}`}
+      aria-haspopup="menu"
+      aria-expanded={menuOpen}
+      onClick={onMore}
+      className={`inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#272D39] text-slate-300 transition hover:bg-white/5 hover:text-white active:scale-90 ${
+        menuOpen ? "bg-white/5 text-white" : ""
+      }`}
+    >
+      <EllipsisVertical className="h-3.5 w-3.5" />
+    </button>
   );
 }
 
@@ -965,7 +942,7 @@ export default function VendorsPage() {
                   <th className={th}>Contract</th>
                   <th className={th}>Rating</th>
                   <th className={th}>Status</th>
-                  <th className={th}>Actions</th>
+                  <th className={`${th} text-center`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -986,12 +963,10 @@ export default function VendorsPage() {
                     <td className={td}>
                       <Badge tone={statusTone[v.status]}>{v.status}</Badge>
                     </td>
-                    <td className={td}>
+                    <td className={`${td} text-center`}>
                       <Actions
                         vendor={v}
                         menuOpen={menu?.id === v.id}
-                        onView={() => setViewing(v)}
-                        onEdit={() => setEditing(v)}
                         onMore={(e) => toggleMenu(e, v.id)}
                       />
                     </td>
@@ -1051,8 +1026,6 @@ export default function VendorsPage() {
               <Actions
                 vendor={v}
                 menuOpen={menu?.id === v.id}
-                onView={() => setViewing(v)}
-                onEdit={() => setEditing(v)}
                 onMore={(e) => toggleMenu(e, v.id)}
               />
             </div>
@@ -1075,12 +1048,38 @@ export default function VendorsPage() {
           style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
           className="fixed z-50 overflow-hidden rounded-lg border border-[#272D39] bg-[#10131A] p-1 text-[11px] shadow-xl shadow-black/40"
         >
+          {/* View Details: opens the details popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setViewing(menuVendor);
+              setMenu(null);
+            }}
+            className={menuBtn}
+          >
+            <Eye className="h-3.5 w-3.5" /> View Details
+          </button>
+
+          {/* Edit: opens the edit popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setEditing(menuVendor);
+              setMenu(null);
+            }}
+            className={menuBtn}
+          >
+            <Pencil className="h-3.5 w-3.5" /> Edit
+          </button>
+
           {/* Call vendor: opens the phone dialer */}
           <a
             href={`tel:${menuVendor.phone.replace(/\D/g, "")}`}
             role="menuitem"
             onClick={() => setMenu(null)}
-            className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-slate-300 transition-colors hover:bg-white/5"
+            className={menuBtn}
           >
             <Phone className="h-3.5 w-3.5" /> Call Vendor
           </a>
@@ -1099,7 +1098,7 @@ export default function VendorsPage() {
                   type="button"
                   role="menuitem"
                   onClick={() => changeStatus(menuVendor, s)}
-                  className={`flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-slate-300 transition-colors hover:bg-white/5 ${cls}`}
+                  className={`${menuBtn} ${cls}`}
                 >
                   <StatusIcon className="h-3.5 w-3.5" /> Mark as {s}
                 </button>

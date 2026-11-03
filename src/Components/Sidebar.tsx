@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { MapPin, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react'
+import { ChevronDown, MapPin, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react'
 import { roleMenus, type Role } from '../lib/roles'
 
 type SidebarProps = {
@@ -36,9 +36,31 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   // If the logo image fails to load, the old "S" circle is shown instead
   const [logoFailed, setLogoFailed] = useState(false)
+  // Which sub menus are open (key = parent href)
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + '/')
+
+  // When the page changes, auto-open the sub menu of the active item
+  useEffect(() => {
+    setOpenMenus((prev) => {
+      const next = { ...prev }
+      navLinks.forEach((l) => {
+        if (
+          l.children?.length &&
+          (isActive(l.href) || l.children.some((c) => isActive(c.href)))
+        ) {
+          next[l.href] = true
+        }
+      })
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname])
+
+  const toggleMenu = (href: string) =>
+    setOpenMenus((prev) => ({ ...prev, [href]: !prev[href] }))
 
   // Mobile: lock page scroll while the drawer is open + close on Esc
   useEffect(() => {
@@ -182,35 +204,99 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           </p>
 
           <nav className="flex flex-col gap-1.5">
-            {navLinks.map(({ href, label, icon: Icon }) => {
-              const active = isActive(href)
+            {navLinks.map(({ href, label, icon: Icon, children }) => {
+              const hasChildren = !!children?.length
+              const childActive = !!children?.some((c) => isActive(c.href))
+              // Parent is highlighted when its own page or any sub page is open
+              const active = isActive(href) || childActive
+              const isOpen = !!openMenus[href]
+
               return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={onClose}
-                  title={collapsed ? label : undefined}
-                  className={`relative flex items-center rounded-lg px-[14px] py-2.5 text-[13px] font-medium transition-colors duration-200 ${
-                    active
-                      ? 'bg-[#6C63FF]/15 text-white'
-                      : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                  }`}
-                >
-                  {active && (
-                    <span className="absolute -left-4 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r bg-[#6C63FF]" />
+                <div key={href}>
+                  {/* ---------- Main row ---------- */}
+                  <div className="relative">
+                    <Link
+                      href={href}
+                      onClick={onClose}
+                      title={collapsed ? label : undefined}
+                      className={`relative flex items-center rounded-lg px-[14px] py-2.5 text-[13px] font-medium transition-colors duration-200 ${
+                        active
+                          ? 'bg-[#6C63FF]/15 text-white'
+                          : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                      } ${hasChildren && !collapsed ? 'pr-10' : ''} ${
+                        hasChildren && collapsed ? 'lg:pr-[14px]' : ''
+                      }`}
+                    >
+                      {active && (
+                        <span className="absolute -left-4 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r bg-[#6C63FF]" />
+                      )}
+                      <Icon
+                        className={`h-4 w-4 shrink-0 ${active ? 'text-[#8B85FF]' : ''}`}
+                      />
+                      {/* Label: stays in place, only fades + slides (icon never shifts) */}
+                      <span
+                        className={`ml-3 shrink-0 whitespace-nowrap transition-[opacity,transform] ${fadeClass(
+                          collapsed
+                        )} ${collapsed ? 'lg:-translate-x-2' : 'translate-x-0'}`}
+                      >
+                        {label}
+                      </span>
+                    </Link>
+
+                    {/* Open / close arrow (only for items that have a sub menu) */}
+                    {hasChildren && (
+                      <button
+                        type="button"
+                        onClick={() => toggleMenu(href)}
+                        aria-label={isOpen ? `Collapse ${label}` : `Expand ${label}`}
+                        aria-expanded={isOpen}
+                        className={`absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/10 hover:text-white ${
+                          collapsed ? 'lg:hidden' : ''
+                        }`}
+                      >
+                        <ChevronDown
+                          className={`h-4 w-4 transition-transform duration-300 ${
+                            isOpen ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* ---------- Sub menu (no icons) ---------- */}
+                  {hasChildren && (
+                    <div
+                      className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+                        isOpen
+                          ? 'grid-rows-[1fr] opacity-100'
+                          : 'grid-rows-[0fr] opacity-0'
+                      } ${collapsed ? 'lg:hidden' : ''}`}
+                    >
+                      <div className="min-h-0 overflow-hidden">
+                        <ul className="ml-[22px] mt-1 flex flex-col gap-1 border-l border-[#272D39] pl-3">
+                          {children!.map((child) => {
+                            const subActive = isActive(child.href)
+                            return (
+                              <li key={child.href}>
+                                <Link
+                                  href={child.href}
+                                  onClick={onClose}
+                                  className={`block rounded-md px-3 py-2 text-[13px] transition-colors duration-200 ${
+                                    subActive
+                                      ? 'bg-[#6C63FF]/15 font-medium text-white'
+                                      : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                                  }`}
+                                >
+                                  {child.label}
+                                </Link>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      </div>
+                    </div>
                   )}
-                  <Icon
-                    className={`h-4 w-4 shrink-0 ${active ? 'text-[#8B85FF]' : ''}`}
-                  />
-                  {/* Label: stays in place, only fades + slides (icon never shifts) */}
-                  <span
-                    className={`ml-3 shrink-0 whitespace-nowrap transition-[opacity,transform] ${fadeClass(
-                      collapsed
-                    )} ${collapsed ? 'lg:-translate-x-2' : 'translate-x-0'}`}
-                  >
-                    {label}
-                  </span>
-                </Link>
+                </div>
               )
             })}
           </nav>

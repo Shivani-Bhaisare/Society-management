@@ -859,11 +859,11 @@ export default function GateManagementPage() {
                           aria-haspopup="menu"
                           aria-expanded={menu?.id === a.id}
                           onClick={(e) => toggleMenu(e, a.id)}
-                          className={`cursor-pointer text-slate-500 hover:text-slate-300 ${
-                            menu?.id === a.id ? 'text-slate-200' : ''
+                          className={`inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#272D39] text-slate-300 transition hover:bg-white/5 hover:text-white active:scale-90 ${
+                            menu?.id === a.id ? 'bg-white/5 text-white' : ''
                           }`}
                         >
-                          <MoreVertical className="h-4 w-4" />
+                          <MoreVertical className="h-3.5 w-3.5" />
                         </button>
                       </td>
                     </tr>

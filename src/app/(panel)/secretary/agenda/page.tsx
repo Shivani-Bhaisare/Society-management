@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion, type Variants } from 'framer-motion'
 import {
   Plus, ChevronDown, ChevronLeft, ChevronRight, RotateCcw,
-  Eye, Pencil, Trash2, CheckCircle2, X, Clock, PlayCircle,
+  Eye, Pencil, Trash2, CheckCircle2, X, Clock, PlayCircle, MoreVertical,
 } from 'lucide-react'
 import { Card, Badge } from '@/Components/ui'
 import AddAgendaModal, { type AgendaPayload } from '@/Components/AddAgendaModal'
@@ -63,11 +63,11 @@ const tabs: ('All' | Status)[] = ['All', 'Upcoming', 'In Progress', 'Completed']
 // All real statuses (used in the Edit popup and the status icons)
 const statusList: Status[] = ['Upcoming', 'In Progress', 'Completed']
 
-// Icon + colour of the status change button in the Actions column
-const statusIcon: Record<Status, { icon: React.ElementType; cls: string }> = {
-  Upcoming: { icon: Clock, cls: 'hover:bg-[#3B82F6]/10 hover:text-[#3B82F6]' },
-  'In Progress': { icon: PlayCircle, cls: 'hover:bg-amber-500/10 hover:text-amber-400' },
-  Completed: { icon: CheckCircle2, cls: 'hover:bg-emerald-500/10 hover:text-emerald-400' },
+// Icon of the status change item in the action menu
+const statusIcon: Record<Status, React.ElementType> = {
+  Upcoming: Clock,
+  'In Progress': PlayCircle,
+  Completed: CheckCircle2,
 }
 
 // "2026-10-13" -> "13 Oct 2026"
@@ -80,8 +80,9 @@ const td = 'border-t border-[#272D39] px-2 py-2.5'
 const field =
   'w-full appearance-none rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 pr-8 text-xs text-slate-200 outline-none focus:border-[#A29CFF]/60'
 
-// Small icon button used in the Actions column
-const iconBtn = 'cursor-pointer rounded-md p-1.5 transition active:scale-90'
+// Shared style of every item inside the 3-dot action menu
+const menuBtn =
+  'flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-medium text-slate-300 transition hover:bg-white/5 hover:text-white'
 
 /* ---------- View Details popup ---------- */
 
@@ -390,6 +391,8 @@ export default function AgendaPage() {
   const [deleting, setDeleting] = useState<AgendaItem | null>(null)
   // Small success message after an action
   const [toast, setToast] = useState('')
+  // Open 3-dot action menu (fixed position so the table scroll area never clips it)
+  const [menu, setMenu] = useState<{ id: number; top: number; left: number } | null>(null)
 
   // Hide the success message after 3 seconds
   useEffect(() => {
@@ -397,6 +400,32 @@ export default function AgendaPage() {
     const t = setTimeout(() => setToast(''), 3000)
     return () => clearTimeout(t)
   }, [toast])
+
+  // Close the action menu on outside click, scroll or resize
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    window.addEventListener('click', close)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [menu])
+
+  // Open the 3-dot menu below the button (flips up if there is no room below)
+  const openMenu = (e: React.MouseEvent<HTMLButtonElement>, id: number) => {
+    e.stopPropagation()
+    if (menu?.id === id) return setMenu(null)
+    const rect = e.currentTarget.getBoundingClientRect()
+    const top = rect.bottom + 200 > window.innerHeight ? rect.top - 200 : rect.bottom + 6
+    setMenu({ id, top, left: rect.right - 170 })
+  }
+
+  // Agenda item whose menu is open
+  const menuItem = menu ? agenda.find((a) => a.id === menu.id) : null
 
   // Meeting filter options (updates when new agenda is added)
   const meetingOptions = useMemo(
@@ -440,7 +469,7 @@ export default function AgendaPage() {
     setEditing(null)
   }
 
-  // Status icons: changes only the status (replace with an API call later)
+  // Status change: changes only the status (replace with an API call later)
   const changeStatus = (a: AgendaItem, next: Status) => {
     setAgenda((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: next } : x)))
     setToast(`"${a.title}" is now ${next}`)
@@ -565,7 +594,7 @@ export default function AgendaPage() {
                   <th className={th}>Title</th>
                   <th className={th}>Meeting</th>
                   <th className={th}>Status</th>
-                  <th className={`${th} text-right`}>Actions</th>
+                  <th className={`${th} text-center`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -576,61 +605,16 @@ export default function AgendaPage() {
                     <td className={`${td} text-slate-400`}>{a.meeting}</td>
                     <td className={td}><Badge tone={tone[a.status]}>{a.status}</Badge></td>
 
-                    {/* Actions: icons directly in the row (no 3-dot menu) */}
-                    <td className={`${td} text-right`}>
-                      <div className="flex items-center justify-end gap-0.5">
-                        {/* View */}
-                        <button
-                          type="button"
-                          title="View Details"
-                          aria-label="View Details"
-                          onClick={() => setViewing(a)}
-                          className={`${iconBtn} text-slate-400 hover:bg-white/5 hover:text-white`}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-
-                        {/* Edit */}
-                        <button
-                          type="button"
-                          title="Edit"
-                          aria-label="Edit"
-                          onClick={() => setEditing(a)}
-                          className={`${iconBtn} text-slate-400 hover:bg-white/5 hover:text-[#A29CFF]`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-
-                        {/* Status change: icons for the statuses this item does not have yet */}
-                        {statusList
-                          .filter((s) => s !== a.status)
-                          .map((s) => {
-                            const { icon: StatusIcon, cls } = statusIcon[s]
-                            return (
-                              <button
-                                key={s}
-                                type="button"
-                                title={`Mark as ${s}`}
-                                aria-label={`Mark as ${s}`}
-                                onClick={() => changeStatus(a, s)}
-                                className={`${iconBtn} text-slate-400 ${cls}`}
-                              >
-                                <StatusIcon className="h-4 w-4" />
-                              </button>
-                            )
-                          })}
-
-                        {/* Delete */}
-                        <button
-                          type="button"
-                          title="Delete"
-                          aria-label="Delete"
-                          onClick={() => setDeleting(a)}
-                          className={`${iconBtn} text-red-400 hover:bg-red-500/10`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
+                    {/* Actions: 3-dot button opens the action menu */}
+                    <td className={`${td} text-center`}>
+                      <button
+                        type="button"
+                        onClick={(e) => openMenu(e, a.id)}
+                        aria-label={`Open actions menu for ${a.title}`}
+                        className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#272D39] text-slate-300 transition hover:bg-white/5 hover:text-white"
+                      >
+                        <MoreVertical className="h-3.5 w-3.5" />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -665,6 +649,75 @@ export default function AgendaPage() {
           </div>
         </Card>
       </motion.div>
+
+      {/* Action dropdown (fixed, outside the scroll area) */}
+      {menu && menuItem && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{ top: menu.top, left: menu.left }}
+          className="fixed z-60 w-[170px] overflow-hidden rounded-lg border border-[#272D39] bg-[#161A23] p-1 shadow-2xl"
+        >
+          {/* View Details */}
+          <button
+            type="button"
+            onClick={() => {
+              setViewing(menuItem)
+              setMenu(null)
+            }}
+            className={menuBtn}
+          >
+            <Eye className="h-3.5 w-3.5" />
+            View Details
+          </button>
+
+          {/* Edit */}
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(menuItem)
+              setMenu(null)
+            }}
+            className={menuBtn}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit
+          </button>
+
+          {/* Status change: the statuses this item does not have yet */}
+          {statusList
+            .filter((s) => s !== menuItem.status)
+            .map((s) => {
+              const StatusIcon = statusIcon[s]
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    changeStatus(menuItem, s)
+                    setMenu(null)
+                  }}
+                  className={menuBtn}
+                >
+                  <StatusIcon className="h-3.5 w-3.5" />
+                  Mark as {s}
+                </button>
+              )
+            })}
+
+          {/* Delete (shown in red) */}
+          <button
+            type="button"
+            onClick={() => {
+              setDeleting(menuItem)
+              setMenu(null)
+            }}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-medium text-red-400 transition hover:bg-red-500/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
+          </button>
+        </div>
+      )}
 
       {/* Add Agenda Modal: kept outside the motion.div (so the fixed position works correctly) */}
       <AddAgendaModal

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   FileText,
@@ -16,6 +16,7 @@ import {
   Pencil,
   BadgeCheck,
   Trash2,
+  EllipsisVertical,
   X,
 } from "lucide-react";
 import { Card, Badge } from "@/Components/ui";
@@ -89,6 +90,13 @@ type VendorBill = {
   status: Status;
 };
 
+// State of the three-dot dropdown (which row is open and where to draw it)
+type RowMenu = { id: number; top: number; left: number };
+
+// Dropdown size used for positioning (View + Edit + Status option + Delete)
+const MENU_WIDTH = 184;
+const MENU_HEIGHT = 190;
+
 const initialBills: VendorBill[] = [
   { id: 1, invoiceNo: "INV-001", vendor: "ABC Elevator Services", category: "Maintenance", amount: "₹ 12,000", status: "Pending" },
   { id: 2, invoiceNo: "INV-002", vendor: "SkyLine Plumbing", category: "Plumbing", amount: "₹ 8,500", status: "Approved" },
@@ -125,9 +133,39 @@ const td = "border-t border-[#272D39] px-2 py-2.5";
 const field =
   "w-full rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60";
 
-// Small icon button used in the Actions column
-const iconBtn =
-  "cursor-pointer rounded-md p-1.5 transition active:scale-90";
+// Shared style of every plain item inside the 3-dot action menu
+const menuBtn =
+  "flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-slate-300 transition-colors hover:bg-white/5";
+
+/* ---------- Small helpers ---------- */
+
+// Row actions: a single 3-dot button that opens the action menu
+function Actions({
+  bill,
+  menuOpen,
+  onMore,
+}: {
+  bill: VendorBill;
+  menuOpen: boolean;
+  onMore: (e: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-menu-btn
+      title="More actions"
+      aria-label={`Open actions menu for ${bill.invoiceNo}`}
+      aria-haspopup="menu"
+      aria-expanded={menuOpen}
+      onClick={onMore}
+      className={`inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#272D39] text-slate-300 transition hover:bg-white/5 hover:text-white active:scale-90 ${
+        menuOpen ? "bg-white/5 text-white" : ""
+      }`}
+    >
+      <EllipsisVertical className="h-3.5 w-3.5" />
+    </button>
+  );
+}
 
 /* ---------- View Details popup ---------- */
 
@@ -503,12 +541,47 @@ export default function VendorBillsPage() {
   // Small success message after an action
   const [toast, setToast] = useState("");
 
+  // Three-dot dropdown state
+  const [menu, setMenu] = useState<RowMenu | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
   // Hide the success message after 3 seconds
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(""), 3000);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // Close the dropdown on outside click, Escape key or page scroll
+  useEffect(() => {
+    if (!menu) return;
+
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Ignore clicks on the dropdown itself and on the three-dot buttons (they toggle on their own)
+      if (
+        menuRef.current?.contains(target) ||
+        target.closest("[data-menu-btn]")
+      )
+        return;
+      setMenu(null);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    const onScroll = () => setMenu(null);
+
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [menu]);
 
   // Filter rows by status and search text
   const list = useMemo(() => {
@@ -545,6 +618,7 @@ export default function VendorBillsPage() {
 
   // Approve / Mark as Paid: changes only the status (replace with an API call later)
   const changeStatus = (b: VendorBill, next: Status) => {
+    setMenu(null);
     setBills((prev) => prev.map((x) => (x.id === b.id ? { ...x, status: next } : x)));
     setToast(`${b.invoiceNo} is now ${next}`);
   };
@@ -556,6 +630,24 @@ export default function VendorBillsPage() {
     setToast(`${deleting.invoiceNo} deleted`);
     setDeleting(null);
   };
+
+  // Three-dot click: toggle the dropdown under the clicked button (flips up near the bottom of the screen)
+  const toggleMenu = (e: React.MouseEvent<HTMLButtonElement>, id: number) => {
+    if (menu?.id === id) {
+      setMenu(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const openUp = rect.bottom + MENU_HEIGHT + 8 > window.innerHeight;
+    setMenu({
+      id,
+      top: openUp ? rect.top - MENU_HEIGHT - 4 : rect.bottom + 4,
+      left: Math.max(8, rect.right - MENU_WIDTH),
+    });
+  };
+
+  // The bill the open dropdown belongs to
+  const menuBill = menu ? bills.find((b) => b.id === menu.id) : null;
 
   return (
     <div className="mx-auto flex w-full max-w-350 flex-col gap-4">
@@ -672,7 +764,7 @@ export default function VendorBillsPage() {
                   <th className={th}>Category</th>
                   <th className={th}>Amount</th>
                   <th className={th}>Status</th>
-                  <th className={`${th} text-right`}>Actions</th>
+                  <th className={`${th} text-center`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -695,70 +787,13 @@ export default function VendorBillsPage() {
                       <Badge tone={toneFor(b.status)}>{b.status}</Badge>
                     </td>
 
-                    {/* Actions: icons directly in the row (no 3-dot menu) */}
-                    <td className={`${td} text-right`}>
-                      <div className="flex items-center justify-end gap-0.5">
-                        {/* View Details */}
-                        <button
-                          type="button"
-                          title="View Details"
-                          aria-label="View Details"
-                          onClick={() => setViewing(b)}
-                          className={`${iconBtn} text-slate-400 hover:bg-white/5 hover:text-white`}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-
-                        {/* Edit */}
-                        <button
-                          type="button"
-                          title="Edit"
-                          aria-label="Edit"
-                          onClick={() => setEditing(b)}
-                          className={`${iconBtn} text-slate-400 hover:bg-white/5 hover:text-[#A29CFF]`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-
-                        {/* Approve: only for bills that are not approved / paid yet */}
-                        {(b.status === "Pending" ||
-                          b.status === "Under Review" ||
-                          b.status === "Draft") && (
-                          <button
-                            type="button"
-                            title="Approve"
-                            aria-label="Approve"
-                            onClick={() => changeStatus(b, "Approved")}
-                            className={`${iconBtn} text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-400`}
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                          </button>
-                        )}
-
-                        {/* Mark as Paid: only for approved bills */}
-                        {b.status === "Approved" && (
-                          <button
-                            type="button"
-                            title="Mark as Paid"
-                            aria-label="Mark as Paid"
-                            onClick={() => changeStatus(b, "Paid")}
-                            className={`${iconBtn} text-slate-400 hover:bg-[#8B5CF6]/10 hover:text-[#8B5CF6]`}
-                          >
-                            <BadgeCheck className="h-4 w-4" />
-                          </button>
-                        )}
-
-                        {/* Delete */}
-                        <button
-                          type="button"
-                          title="Delete"
-                          aria-label="Delete"
-                          onClick={() => setDeleting(b)}
-                          className={`${iconBtn} text-red-400 hover:bg-red-500/10`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
+                    {/* Actions: single 3-dot button (same as Vendors) */}
+                    <td className={`${td} text-center`}>
+                      <Actions
+                        bill={b}
+                        menuOpen={menu?.id === b.id}
+                        onMore={(e) => toggleMenu(e, b.id)}
+                      />
                     </td>
                   </motion.tr>
                 ))}
@@ -812,6 +847,92 @@ export default function VendorBillsPage() {
           </div>
         </Card>
       </motion.div>
+
+      {/* Three-dot dropdown: fixed position so the table's overflow does not clip it */}
+      {menu && menuBill && (
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
+          className="fixed z-50 overflow-hidden rounded-lg border border-[#272D39] bg-[#10131A] p-1 text-[11px] shadow-xl shadow-black/40"
+        >
+          {/* View Details: opens the details popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setViewing(menuBill);
+              setMenu(null);
+            }}
+            className={menuBtn}
+          >
+            <Eye className="h-3.5 w-3.5" /> View Details
+          </button>
+
+          {/* Edit: opens the edit popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setEditing(menuBill);
+              setMenu(null);
+            }}
+            className={menuBtn}
+          >
+            <Pencil className="h-3.5 w-3.5" /> Edit
+          </button>
+
+          {/* Status options: only shown when a next step is available */}
+          {menuBill.status !== "Paid" && (
+            <>
+              {/* Divider */}
+              <div className="my-1 border-t border-[#272D39]" />
+
+              {/* Approve: only for bills that are not approved / paid yet */}
+              {(menuBill.status === "Pending" ||
+                menuBill.status === "Under Review" ||
+                menuBill.status === "Draft") && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => changeStatus(menuBill, "Approved")}
+                  className={`${menuBtn} hover:text-emerald-400`}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                </button>
+              )}
+
+              {/* Mark as Paid: only for approved bills */}
+              {menuBill.status === "Approved" && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => changeStatus(menuBill, "Paid")}
+                  className={`${menuBtn} hover:text-[#8B5CF6]`}
+                >
+                  <BadgeCheck className="h-3.5 w-3.5" /> Mark as Paid
+                </button>
+              )}
+            </>
+          )}
+
+          {/* Divider */}
+          <div className="my-1 border-t border-[#272D39]" />
+
+          {/* Delete: opens the confirm popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setDeleting(menuBill);
+              setMenu(null);
+            }}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-red-400 transition-colors hover:bg-red-500/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+          </button>
+        </div>
+      )}
 
       {/* Add Vendor Bill drawer */}
       <AddVendorBillModal

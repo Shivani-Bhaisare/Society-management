@@ -107,7 +107,8 @@ const Navbar = () => {
 
           {/* Button gets a small scale effect on hover and press */}
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button href="#">Book a Demo</Button>
+              <Button href="/auth/register">Register</Button>
+
           </motion.div>
         </motion.div>
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   ListChecks,
@@ -14,6 +14,7 @@ import {
   Pencil,
   Power,
   Trash2,
+  EllipsisVertical,
   X,
 } from "lucide-react";
 import { Card, Badge } from "@/Components/ui";
@@ -53,6 +54,13 @@ type Charge = {
   status: "Active" | "Inactive";
 };
 
+// State of the three-dot dropdown (which row is open and where to draw it)
+type RowMenu = { id: number; top: number; left: number };
+
+// Dropdown size used for positioning (Edit + Status option + Delete)
+const MENU_WIDTH = 184;
+const MENU_HEIGHT = 140;
+
 const initialCharges: Charge[] = [
   { id: 1, name: "Maintenance", method: "Fixed", value: 3000, frequency: "Monthly", status: "Active" },
   { id: 2, name: "Parking", method: "Fixed", value: 500, frequency: "Monthly", status: "Active" },
@@ -73,9 +81,9 @@ const td = "border-t border-[#272D39] px-2 py-2.5";
 const field =
   "w-full rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60";
 
-// Small icon button used in the Actions column
-const iconBtn =
-  "cursor-pointer rounded-md p-1.5 transition active:scale-90";
+// Shared style of every plain item inside the 3-dot action menu
+const menuBtn =
+  "flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-slate-300 transition-colors hover:bg-white/5";
 
 /* ---------- Small helpers ---------- */
 
@@ -84,6 +92,34 @@ function formatValue(c: Charge) {
   if (c.method === "Percentage") return `${c.value}%`;
   if (c.method === "Per Sq. Ft.") return `₹ ${c.value.toLocaleString("en-IN")} / sq.ft`;
   return `₹ ${c.value.toLocaleString("en-IN")}`;
+}
+
+// Row actions: a single 3-dot button that opens the action menu
+function Actions({
+  charge,
+  menuOpen,
+  onMore,
+}: {
+  charge: Charge;
+  menuOpen: boolean;
+  onMore: (e: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-menu-btn
+      title="More actions"
+      aria-label={`Open actions menu for ${charge.name}`}
+      aria-haspopup="menu"
+      aria-expanded={menuOpen}
+      onClick={onMore}
+      className={`inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#272D39] text-slate-300 transition hover:bg-white/5 hover:text-white active:scale-90 ${
+        menuOpen ? "bg-white/5 text-white" : ""
+      }`}
+    >
+      <EllipsisVertical className="h-3.5 w-3.5" />
+    </button>
+  );
 }
 
 /* ---------- Edit Charge Head popup ---------- */
@@ -375,12 +411,47 @@ export default function MultipleChargeHeadsPage() {
   // Small success message after an action
   const [toast, setToast] = useState("");
 
+  // Three-dot dropdown state
+  const [menu, setMenu] = useState<RowMenu | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
   // Hide the success message after 3 seconds
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(""), 3000);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // Close the dropdown on outside click, Escape key or page scroll
+  useEffect(() => {
+    if (!menu) return;
+
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Ignore clicks on the dropdown itself and on the three-dot buttons (they toggle on their own)
+      if (
+        menuRef.current?.contains(target) ||
+        target.closest("[data-menu-btn]")
+      )
+        return;
+      setMenu(null);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    const onScroll = () => setMenu(null);
+
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [menu]);
 
   // Summary numbers are calculated from the list
   const total = charges.length;
@@ -448,6 +519,7 @@ export default function MultipleChargeHeadsPage() {
   // Activate / Deactivate: flips the status (replace with an API call later)
   const toggleStatus = (c: Charge) => {
     const next: Charge["status"] = c.status === "Active" ? "Inactive" : "Active";
+    setMenu(null);
     setCharges((prev) =>
       prev.map((x) => (x.id === c.id ? { ...x, status: next } : x)),
     );
@@ -461,6 +533,24 @@ export default function MultipleChargeHeadsPage() {
     setToast(`${deleting.name} deleted`);
     setDeleting(null);
   };
+
+  // Three-dot click: toggle the dropdown under the clicked button (flips up near the bottom of the screen)
+  const toggleMenu = (e: React.MouseEvent<HTMLButtonElement>, id: number) => {
+    if (menu?.id === id) {
+      setMenu(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const openUp = rect.bottom + MENU_HEIGHT + 8 > window.innerHeight;
+    setMenu({
+      id,
+      top: openUp ? rect.top - MENU_HEIGHT - 4 : rect.bottom + 4,
+      left: Math.max(8, rect.right - MENU_WIDTH),
+    });
+  };
+
+  // The charge head the open dropdown belongs to
+  const menuCharge = menu ? charges.find((c) => c.id === menu.id) : null;
 
   return (
     <div className="mx-auto flex w-full max-w-350 flex-col gap-4">
@@ -549,7 +639,7 @@ export default function MultipleChargeHeadsPage() {
                   <th className={th}>Amount / Rate</th>
                   <th className={th}>Frequency</th>
                   <th className={th}>Status</th>
-                  <th className={`${th} text-right`}>Actions</th>
+                  <th className={`${th} text-center`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -575,46 +665,13 @@ export default function MultipleChargeHeadsPage() {
                       </Badge>
                     </td>
 
-                    {/* Actions: icons directly in the row (no 3-dot menu) */}
-                    <td className={`${td} text-right`}>
-                      <div className="flex items-center justify-end gap-0.5">
-                        {/* Edit */}
-                        <button
-                          type="button"
-                          title="Edit"
-                          aria-label="Edit"
-                          onClick={() => setEditing(c)}
-                          className={`${iconBtn} text-slate-400 hover:bg-white/5 hover:text-[#A29CFF]`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-
-                        {/* Activate / Deactivate */}
-                        <button
-                          type="button"
-                          title={c.status === "Active" ? "Deactivate" : "Activate"}
-                          aria-label={c.status === "Active" ? "Deactivate" : "Activate"}
-                          onClick={() => toggleStatus(c)}
-                          className={`${iconBtn} ${
-                            c.status === "Active"
-                              ? "text-emerald-400 hover:bg-emerald-500/10"
-                              : "text-slate-500 hover:bg-white/5 hover:text-white"
-                          }`}
-                        >
-                          <Power className="h-4 w-4" />
-                        </button>
-
-                        {/* Delete */}
-                        <button
-                          type="button"
-                          title="Delete"
-                          aria-label="Delete"
-                          onClick={() => setDeleting(c)}
-                          className={`${iconBtn} text-red-400 hover:bg-red-500/10`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
+                    {/* Actions: single 3-dot button (same as Vendors) */}
+                    <td className={`${td} text-center`}>
+                      <Actions
+                        charge={c}
+                        menuOpen={menu?.id === c.id}
+                        onMore={(e) => toggleMenu(e, c.id)}
+                      />
                     </td>
                   </motion.tr>
                 ))}
@@ -663,6 +720,63 @@ export default function MultipleChargeHeadsPage() {
           </div>
         </Card>
       </motion.div>
+
+      {/* Three-dot dropdown: fixed position so the table's overflow does not clip it */}
+      {menu && menuCharge && (
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
+          className="fixed z-50 overflow-hidden rounded-lg border border-[#272D39] bg-[#10131A] p-1 text-[11px] shadow-xl shadow-black/40"
+        >
+          {/* Edit: opens the edit popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setEditing(menuCharge);
+              setMenu(null);
+            }}
+            className={menuBtn}
+          >
+            <Pencil className="h-3.5 w-3.5" /> Edit
+          </button>
+
+          {/* Divider */}
+          <div className="my-1 border-t border-[#272D39]" />
+
+          {/* Status option: the status the charge head is not in right now */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => toggleStatus(menuCharge)}
+            className={`${menuBtn} ${
+              menuCharge.status === "Active"
+                ? "hover:text-slate-200"
+                : "hover:text-emerald-400"
+            }`}
+          >
+            <Power className="h-3.5 w-3.5" /> Mark as{" "}
+            {menuCharge.status === "Active" ? "Inactive" : "Active"}
+          </button>
+
+          {/* Divider */}
+          <div className="my-1 border-t border-[#272D39]" />
+
+          {/* Delete: opens the confirm popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setDeleting(menuCharge);
+              setMenu(null);
+            }}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-red-400 transition-colors hover:bg-red-500/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+          </button>
+        </div>
+      )}
 
       {/* Add Charge Head drawer */}
       <AddChargeHeadModal

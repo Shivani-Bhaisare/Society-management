@@ -13,7 +13,7 @@ export default function AuthLayout({
   children: React.ReactNode
 }) {
   return (
-<div className="min-h-screen w-full bg-[#021024] flex flex-col lg:flex-row overflow-x-hidden font-sans text-slate-800 antialiased selection:bg-blue-600 selection:text-white relative">
+<div className="h-dvh w-full bg-[#021024] flex flex-col lg:flex-row overflow-hidden font-sans text-slate-800 antialiased selection:bg-blue-600 selection:text-white relative">
 
   {/* =========================================================
       TOP-RIGHT BACK TO HOME
@@ -65,7 +65,7 @@ export default function AuthLayout({
 
 
   {/* =========================================================
-      LEFT AUTH PANEL
+      LEFT AUTH PANEL (fixed height, page does not scroll)
       ========================================================= */}
   <div
     className="
@@ -83,7 +83,8 @@ export default function AuthLayout({
       lg:py-6
       xl:px-8
       xl:py-7
-      min-h-screen
+      h-dvh
+      overflow-hidden
       relative
       z-10
       bg-[#021024]
@@ -93,7 +94,7 @@ export default function AuthLayout({
     {/* =======================================================
         HEADER
         ======================================================= */}
-    <header className="flex items-center">
+    <header className="flex shrink-0 items-center">
 
       <Link
         href="/"
@@ -158,11 +159,12 @@ export default function AuthLayout({
 
 
     {/* =======================================================
-        AUTH FORM
+        AUTH FORM (takes remaining height, form scrolls inside)
         ======================================================= */}
     <main
       className="
-        my-auto
+        flex-1
+        min-h-0
         py-4
         sm:py-5
         flex
@@ -173,7 +175,7 @@ export default function AuthLayout({
       "
     >
 
-      <div className="w-full max-w-[390px]">
+      <div className="flex min-h-0 w-full max-w-[390px] flex-col [&>*]:min-h-0">
 
         {children}
 
@@ -185,13 +187,13 @@ export default function AuthLayout({
     {/* =======================================================
         SMALL FOOTER
         ======================================================= */}
-    <div className="h-1" />
+    <div className="h-1 shrink-0" />
 
   </div>
 
 
   {/* =========================================================
-      RIGHT HERO PANEL
+      RIGHT HERO PANEL (fixed height, no scroll)
       ========================================================= */}
   <div
     className="
@@ -200,13 +202,16 @@ export default function AuthLayout({
       lg:flex
       lg:w-[58%]
       xl:w-[60%]
+      lg:sticky
+      lg:top-0
+      lg:h-screen
+      lg:self-start
       flex-col
       justify-between
       px-7
       py-7
       xl:px-9
       xl:py-8
-      min-h-screen
       overflow-hidden
       bg-[#021329]
       select-none
@@ -267,7 +272,7 @@ export default function AuthLayout({
 
 
     {/* =======================================================
-        HERO CONTENT
+        HERO CONTENT (moved up)
         ======================================================= */}
     <div
       className="
@@ -276,6 +281,8 @@ export default function AuthLayout({
         max-w-md
         my-auto
         py-4
+        -translate-y-10
+        xl:-translate-y-14
       "
     >
 
@@ -351,17 +358,17 @@ export default function AuthLayout({
 
 
     {/* =======================================================
-        TESTIMONIAL
+        TESTIMONIAL (moved up)
         ======================================================= */}
   <div
   className="
     absolute
     left-6
     right-6
-    bottom-6
+    bottom-24
     xl:left-8
     xl:right-8
-    xl:bottom-8
+    xl:bottom-28
   "
 >
   <div className="relative z-10 w-full max-w-2xl">

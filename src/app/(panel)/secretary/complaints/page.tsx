@@ -77,9 +77,9 @@ type Complaint = {
 // State of the three-dot dropdown (which row is open and where to draw it)
 type RowMenu = { id: string; top: number; left: number };
 
-// Dropdown size used for positioning
+// Dropdown size used for positioning (View + Edit + 3 status options + Delete)
 const MENU_WIDTH = 176;
-const MENU_HEIGHT = 160;
+const MENU_HEIGHT = 230;
 
 // Complaints list (initial data)
 const initialComplaints: Complaint[] = [
@@ -209,6 +209,10 @@ const th =
 const td = "border-t border-[#272D39] px-2 py-2.5";
 const field =
   "w-full appearance-none rounded-lg border border-[#272D39] bg-[#10131A] px-3 py-2 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#A29CFF]/60";
+
+// Shared style of every plain item inside the 3-dot action menu
+const menuBtn =
+  "flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-slate-300 transition-colors hover:bg-white/5 hover:text-white";
 
 // Reusable select with a chevron icon
 function Select({
@@ -960,7 +964,7 @@ export default function ComplaintsPage() {
                   <th className={th}>Date</th>
                   <th className={th}>Assigned To</th>
                   <th className={th}>Status</th>
-                  <th className={`${th} text-right`}>Actions</th>
+                  <th className={`${th} text-center`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1002,44 +1006,23 @@ export default function ComplaintsPage() {
                       <td className={td}>
                         <Badge tone={statusTone[c.status]}>{c.status}</Badge>
                       </td>
-                      <td className={`${td} text-right`}>
-                        <span className="inline-flex items-center gap-0.5 text-slate-400">
-                          {/* View: opens the details popup */}
-                          <button
-                            type="button"
-                            title="View Details"
-                            aria-label="View"
-                            onClick={() => setViewing(c)}
-                            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition hover:bg-white/5 hover:text-white active:scale-90"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </button>
-                          {/* Edit: opens the edit popup */}
-                          <button
-                            type="button"
-                            title="Edit"
-                            aria-label="Edit"
-                            onClick={() => setEditing(c)}
-                            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition hover:bg-white/5 hover:text-[#A29CFF] active:scale-90"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          {/* Three dot: opens the actions dropdown (change status / delete) */}
-                          <button
-                            type="button"
-                            data-menu-btn
-                            title="More actions"
-                            aria-label="More actions"
-                            aria-haspopup="menu"
-                            aria-expanded={menu?.id === c.id}
-                            onClick={(e) => toggleMenu(e, c.id)}
-                            className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition hover:bg-white/5 active:scale-90 ${
-                              menu?.id === c.id ? "bg-white/5 text-slate-200" : ""
-                            }`}
-                          >
-                            <MoreVertical className="h-3.5 w-3.5" />
-                          </button>
-                        </span>
+
+                      {/* Actions: 3-dot button opens the action menu */}
+                      <td className={`${td} text-center`}>
+                        <button
+                          type="button"
+                          data-menu-btn
+                          title="More actions"
+                          aria-label={`Open actions menu for ${c.id}`}
+                          aria-haspopup="menu"
+                          aria-expanded={menu?.id === c.id}
+                          onClick={(e) => toggleMenu(e, c.id)}
+                          className={`inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#272D39] text-slate-300 transition hover:bg-white/5 hover:text-white active:scale-90 ${
+                            menu?.id === c.id ? "bg-white/5 text-white" : ""
+                          }`}
+                        >
+                          <MoreVertical className="h-3.5 w-3.5" />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -1106,6 +1089,35 @@ export default function ComplaintsPage() {
           style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
           className="fixed z-50 overflow-hidden rounded-lg border border-[#272D39] bg-[#10131A] p-1 text-[11px] shadow-xl shadow-black/40"
         >
+          {/* View Details: opens the details popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setViewing(menuItem);
+              setMenu(null);
+            }}
+            className={menuBtn}
+          >
+            <Eye className="h-3.5 w-3.5" /> View Details
+          </button>
+
+          {/* Edit: opens the edit popup */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setEditing(menuItem);
+              setMenu(null);
+            }}
+            className={menuBtn}
+          >
+            <Pencil className="h-3.5 w-3.5" /> Edit
+          </button>
+
+          {/* Divider */}
+          <div className="my-1 border-t border-[#272D39]" />
+
           {/* Status options: every status except the current one */}
           {statuses
             .filter((s) => s !== menuItem.status)

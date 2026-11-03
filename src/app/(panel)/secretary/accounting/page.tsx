@@ -559,7 +559,7 @@ export default function AccountingPage() {
                   <th className={th}>Category</th>
                   <th className={th}>Amount</th>
                   <th className={th}>Type</th>
-                  <th className={th} />
+                  <th className={th}>Action</th> 
                 </tr>
               </thead>
               <tbody>
