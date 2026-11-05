@@ -81,11 +81,18 @@ export const roleMenus: Record<Role, NavLink[]> = {
         },
       ],
     },
-    {
-      href: "/president/finance",
-      label: "Finance & Accounting",
-      icon: Landmark,
-    },
+ {
+  href: "/president/finance",
+  label: "Finance",
+  icon: Landmark,
+  children: [
+    { href: "/president/finance/overview", label: "Finance Overview" },
+    { href: "/president/finance/maintenance-billing", label: "Maintenance & Billing" },
+    { href: "/president/finance/payment", label: "Payment" },
+    { href: "/president/finance/accounting", label: "Accounting" },
+    { href: "/president/finance/expenses", label: "Expenses" },
+  ],
+},
     {
       href: "/president/billing",
       label: "Maintenance & Billing",

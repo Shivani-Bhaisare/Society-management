@@ -62,6 +62,17 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const toggleMenu = (href: string) =>
     setOpenMenus((prev) => ({ ...prev, [href]: !prev[href] }))
 
+  // Parent click (items with a sub menu): only open / close the sub menu.
+  // If the sidebar is collapsed, expand it first so the sub menu is visible.
+  const handleParentClick = (href: string) => {
+    if (collapsed) {
+      setCollapsed(false)
+      setOpenMenus((prev) => ({ ...prev, [href]: true }))
+      return
+    }
+    toggleMenu(href)
+  }
+
   // Mobile: lock page scroll while the drawer is open + close on Esc
   useEffect(() => {
     if (!open) return
@@ -207,59 +218,79 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             {navLinks.map(({ href, label, icon: Icon, children }) => {
               const hasChildren = !!children?.length
               const childActive = !!children?.some((c) => isActive(c.href))
-              // Parent is highlighted when its own page or any sub page is open
-              const active = isActive(href) || childActive
+              // Parent with a sub menu is highlighted only when one of its sub pages is open.
+              // Normal items are highlighted when their own page is open.
+              const active = hasChildren ? childActive : isActive(href)
               const isOpen = !!openMenus[href]
+
+              // Same look for the parent button and the normal link
+              const rowClass = `relative flex w-full items-center rounded-lg px-[14px] py-2.5 text-left text-[13px] font-medium transition-colors duration-200 ${
+                active
+                  ? 'bg-[#6C63FF]/15 text-white'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              } ${hasChildren && !collapsed ? 'pr-10' : ''} ${
+                hasChildren && collapsed ? 'lg:pr-[14px]' : ''
+              }`
+
+              // Content shared by both (active bar + icon + label)
+              const rowContent = (
+                <>
+                  {active && (
+                    <span className="absolute -left-4 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r bg-[#6C63FF]" />
+                  )}
+                  <Icon
+                    className={`h-4 w-4 shrink-0 ${active ? 'text-[#8B85FF]' : ''}`}
+                  />
+                  {/* Label: stays in place, only fades + slides (icon never shifts) */}
+                  <span
+                    className={`ml-3 shrink-0 whitespace-nowrap transition-[opacity,transform] ${fadeClass(
+                      collapsed
+                    )} ${collapsed ? 'lg:-translate-x-2' : 'translate-x-0'}`}
+                  >
+                    {label}
+                  </span>
+                </>
+              )
 
               return (
                 <div key={href}>
                   {/* ---------- Main row ---------- */}
                   <div className="relative">
-                    <Link
-                      href={href}
-                      onClick={onClose}
-                      title={collapsed ? label : undefined}
-                      className={`relative flex items-center rounded-lg px-[14px] py-2.5 text-[13px] font-medium transition-colors duration-200 ${
-                        active
-                          ? 'bg-[#6C63FF]/15 text-white'
-                          : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                      } ${hasChildren && !collapsed ? 'pr-10' : ''} ${
-                        hasChildren && collapsed ? 'lg:pr-[14px]' : ''
-                      }`}
-                    >
-                      {active && (
-                        <span className="absolute -left-4 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r bg-[#6C63FF]" />
-                      )}
-                      <Icon
-                        className={`h-4 w-4 shrink-0 ${active ? 'text-[#8B85FF]' : ''}`}
-                      />
-                      {/* Label: stays in place, only fades + slides (icon never shifts) */}
-                      <span
-                        className={`ml-3 shrink-0 whitespace-nowrap transition-[opacity,transform] ${fadeClass(
-                          collapsed
-                        )} ${collapsed ? 'lg:-translate-x-2' : 'translate-x-0'}`}
-                      >
-                        {label}
-                      </span>
-                    </Link>
-
-                    {/* Open / close arrow (only for items that have a sub menu) */}
-                    {hasChildren && (
+                    {hasChildren ? (
+                      /* Parent with sub menu: NO page link, only opens / closes the sub menu */
                       <button
                         type="button"
-                        onClick={() => toggleMenu(href)}
-                        aria-label={isOpen ? `Collapse ${label}` : `Expand ${label}`}
+                        onClick={() => handleParentClick(href)}
+                        title={collapsed ? label : undefined}
                         aria-expanded={isOpen}
-                        className={`absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/10 hover:text-white ${
-                          collapsed ? 'lg:hidden' : ''
-                        }`}
+                        aria-label={isOpen ? `Collapse ${label}` : `Expand ${label}`}
+                        className={`cursor-pointer ${rowClass}`}
                       >
-                        <ChevronDown
-                          className={`h-4 w-4 transition-transform duration-300 ${
-                            isOpen ? 'rotate-180' : ''
+                        {rowContent}
+
+                        {/* Arrow (decorative, the whole row is the button) */}
+                        <span
+                          className={`absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 ${
+                            collapsed ? 'lg:hidden' : ''
                           }`}
-                        />
+                        >
+                          <ChevronDown
+                            className={`h-4 w-4 transition-transform duration-300 ${
+                              isOpen ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </span>
                       </button>
+                    ) : (
+                      /* Normal item: opens its page */
+                      <Link
+                        href={href}
+                        onClick={onClose}
+                        title={collapsed ? label : undefined}
+                        className={rowClass}
+                      >
+                        {rowContent}
+                      </Link>
                     )}
                   </div>
 

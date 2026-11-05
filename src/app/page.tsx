@@ -10,6 +10,7 @@ import Residents from '../Components/Residents'
 import Complaints from '../Components/Complaints'
 import Amenities from '../Components/Amenities'
 import Parking from '../Components/Parking'
+import PlanSummaryCard from '../Components/PlanSummaryCard'
 import Staff from '../Components/Staff'
 import Communication from '../Components/Communication'
 import Documents from '../Components/Documents'
@@ -36,6 +37,7 @@ export default function Home() {
      <Complaints/>
      <Amenities/>
      <Parking/>
+     <PlanSummaryCard />
      <Staff/>
      <Communication/>
      <Documents/>
