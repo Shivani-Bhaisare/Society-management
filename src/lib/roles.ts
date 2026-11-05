@@ -63,13 +63,17 @@ export const roleMenus: Record<Role, NavLink[]> = {
       icon: LayoutDashboard,
     },
     {
-      href: "/president/society-master",
-      label: "Society Master",
+      href: "/president/society-management",
+      label: "Society Management",
       icon: Building2,
       children: [
         {
-          href: "/president/residents",
-          label: "Residents",
+          href: "/president/society-master",
+          label: "Society Master",
+        },
+        {
+          href: "/president/residents-master",
+          label: "Residents Master",
         },
         {
           href: "/president/committee",

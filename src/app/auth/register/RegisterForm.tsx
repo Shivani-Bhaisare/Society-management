@@ -345,7 +345,9 @@ export default function RegisterForm() {
     try {
       // TODO: call your register API here (send form.countryCode + form.mobile)
       await new Promise((r) => setTimeout(r, 800))
-      router.push('/auth/otp')
+
+      // After a successful register, go straight to the Login page
+      router.push('/auth/login')
     } finally {
       setLoading(false)
     }

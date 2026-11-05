@@ -283,7 +283,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                                   onClick={onClose}
                                   className={`block rounded-md px-3 py-2 text-[13px] transition-colors duration-200 ${
                                     subActive
-                                      ? 'bg-[#6C63FF]/15 font-medium text-white'
+                                      ? 'font-medium text-[#8B85FF]'
                                       : 'text-slate-400 hover:bg-white/5 hover:text-white'
                                   }`}
                                 >
